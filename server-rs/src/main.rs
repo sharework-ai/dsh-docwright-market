@@ -51,20 +51,7 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("storage buckets unusable: {}", e.message));
 
-    let app = Router::new()
-        .route("/config.json", get(frontend_config))
-        .route("/api/submissions", post(api::submissions::submit))
-        .route("/api/submissions/{id}", get(api::submissions::get_submission))
-        .route("/api/packs", get(api::packs::list))
-        .route("/api/packs/{name}", get(api::packs::detail))
-        .route("/api/index", get(api::packs::index))
-        .route("/tarballs/{file}", get(api::packs::tarball))
-        .route("/api/admin/queue", get(api::admin::queue))
-        .route("/api/admin/review/{id}", post(api::admin::review))
-        .fallback_service(
-            ServeDir::new(&cfg.web_dir).append_index_html_on_directories(true),
-        )
-        .with_state(state);
+    let app = build_router(state, &cfg.web_dir);
 
     let listener = tokio::net::TcpListener::bind(cfg.listen)
         .await
@@ -80,4 +67,23 @@ async fn frontend_config(State(state): State<Arc<AppState>>) -> Json<serde_json:
         "supabaseUrl": state.cfg.supabase_api_url,
         "supabasePublishableKey": state.cfg.supabase_publishable_key,
     }))
+}
+
+/// The whole HTTP surface, split out of `main` so the integration tests can
+/// drive the real routes against a scratch database.
+pub(crate) fn build_router(state: Arc<AppState>, web_dir: &str) -> Router {
+    Router::new()
+        .route("/config.json", get(frontend_config))
+        .route("/api/submissions", post(api::submissions::submit))
+        .route("/api/submissions/{id}", get(api::submissions::get_submission))
+        .route("/api/packs", get(api::packs::list))
+        .route("/api/packs/{name}", get(api::packs::detail))
+        .route("/api/index", get(api::packs::index))
+        .route("/tarballs/{file}", get(api::packs::tarball))
+        .route("/api/admin/queue", get(api::admin::queue))
+        .route("/api/admin/review/{id}", post(api::admin::review))
+        .fallback_service(
+            ServeDir::new(web_dir).append_index_html_on_directories(true),
+        )
+        .with_state(state)
 }

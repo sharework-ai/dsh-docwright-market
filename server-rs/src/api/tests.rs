@@ -301,10 +301,14 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 
 fn test_state(pool: PgPool) -> Arc<crate::state::AppState> {
+    test_state_with(pool, "http://supabase.invalid")
+}
+
+fn test_state_with(pool: PgPool, supabase_api_url: &str) -> Arc<crate::state::AppState> {
     Arc::new(crate::state::AppState {
         cfg: crate::config::Config {
             listen: "127.0.0.1:0".parse().unwrap(),
-            supabase_api_url: "http://supabase.invalid".into(),
+            supabase_api_url: supabase_api_url.into(),
             supabase_secret_key: "test".into(),
             supabase_publishable_key: "test".into(),
             database_url: String::new(),
@@ -462,4 +466,44 @@ async fn tarball_route_rejects_malformed_names(pool: PgPool) {
     .await
     .expect_err("traversal names must be rejected before the DB lookup");
     assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn auth_gated_routes_reject_missing_and_bogus_tokens(pool: PgPool) {
+    init_log();
+    // supabase_api_url points at a dead port: both verification paths
+    // (JWKS fetch, GoTrue /user fallback) must fail -> 401, never a 5xx.
+    let app = crate::build_router(test_state_with(pool, "http://127.0.0.1:9"), "");
+
+    for path in [
+        "/api/submissions/00000000-0000-0000-0000-000000000000",
+        "/api/admin/queue",
+    ] {
+        let response = tower::ServiceExt::oneshot(
+            app.clone(),
+            axum::http::Request::builder()
+                .uri(path)
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::UNAUTHORIZED,
+            "{path} without a token must 401"
+        );
+    }
+
+    let response = tower::ServiceExt::oneshot(
+        app,
+        axum::http::Request::builder()
+            .uri("/api/admin/queue")
+            .header("authorization", "Bearer not-a-real-jwt")
+            .body(axum::body::Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
 }

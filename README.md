@@ -128,21 +128,29 @@ scripts/test.sh          # both layers:
                          #             with the real migrations applied
 scripts/test.sh --cov    # + Rust coverage summary (cargo-llvm-cov; needs
                          #             rust-dev:1.3+)
-scripts/e2e.sh           # full chain: submit → verify → review → publish →
-                         # install → docwright pack:check on the installed
-                         # copy (integration; no unit-test substitute)
+scripts/e2e.sh           # integration scenarios: the happy chain (submit →
+                         # verify → review → publish → install → docwright
+                         # pack:check on the installed copy) plus negative
+                         # rules: 401 unauthenticated, 400 bad category,
+                         # 409 pending duplicate & reused version, 403
+                         # non-admin access and cross-account updates
 ```
 
 What the unit layer pins down today:
 
 - **verifier** (~92% lines): endpoint behavior, market shape rules, archive
   safety, content hashing.
-- **server-rs** (~39% lines): all market rules (queue dedup, version
+- **install.mjs** (7 CLI cases): a local fake market pins exit codes
+  (0/2/3), landed files, and every integrity rejection (tarball sha256,
+  content hash, manifest name, duplicate without --force).
+- **server-rs** (~47% lines): all market rules (queue dedup, version
   uniqueness/monotonicity, ownership, content-change), the publish upsert
-  (first publish + update preserving `added`), the review transition, and the
+  (first publish + update preserving `added`), the review transition, the
   read-side handlers (list/detail/index/tarball incl. the 302-vs-404 and
-  traversal rejection). Semver ordering incl. pre-releases. The uncovered rest
-  is HTTP wiring and Storage round-trips — covered by `scripts/e2e.sh`.
+  traversal rejection), and auth rejection paths through the real router
+  (401 on missing/bogus tokens). Semver ordering incl. pre-releases.
+  The uncovered rest is HTTP wiring and Storage round-trips — covered by
+  the e2e scenario suite below.
 
 npm devDependencies (vitest) are dev-only — runtime stays zero-dependency
 (verifier, installer, and web pages pull no packages).

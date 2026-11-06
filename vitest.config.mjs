@@ -6,7 +6,7 @@ import { defineConfig } from 'vitest/config'
 // passed as CLI flags work. Keep the flags in one place — the script above.
 export default defineConfig({
   test: {
-    include: ['verifier/test/**/*.test.mjs'],
+    include: ['verifier/test/**/*.test.mjs', 'install.test.mjs'],
     testTimeout: 30000,
   },
 })

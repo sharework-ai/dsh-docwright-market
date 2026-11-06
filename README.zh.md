@@ -114,18 +114,24 @@ scripts/test.sh          # 两层一起跑:
                          #             建独立 scratch 库并应用真实 migrations
 scripts/test.sh --cov    # 追加 Rust 覆盖率摘要(cargo-llvm-cov,需
                          #             rust-dev:1.3+)
-scripts/e2e.sh           # 全链集成:投稿 → 校验 → 审核 → 发布 → 安装 →
-                         # 对装出的副本再跑 docwright pack:check
+scripts/e2e.sh           # 集成场景:快乐链(投稿 → 校验 → 审核 → 发布 →
+                         # 安装 → 对装出副本再跑 pack:check)+ 负路径规则:
+                         # 401 未认证、400 非法分类、409 待审重复与版本占用、
+                         # 403 非管理员访问与冒名更新
 ```
 
 单元层目前钉住的行为:
 
 - **verifier**(约 92% 行):端点行为、市场形状规则、解包安全、内容哈希。
-- **server-rs**(约 39% 行):全部市场规则(队列去重、版本唯一/递增、
+- **install.mjs**(7 个 CLI 用例):本地假 market 钉住退出码(0/2/3)、
+  落盘文件与全部完整性拒绝(tarball sha256、内容哈希、manifest 名、
+  未带 --force 的重装)。
+- **server-rs**(约 47% 行):全部市场规则(队列去重、版本唯一/递增、
   所有权、内容变更要求)、发布 upsert(首发 + 更新保留 added)、审核状态
   迁移、读侧 handler(list/detail/index/tarball,含 302/404 与穿越拒绝)、
-  semver 排序(含 pre-release)。未覆盖部分是 HTTP 装配与 Storage 往返,
-  由 `scripts/e2e.sh` 兜底。
+  真实路由上的认证拒绝路径(缺失/伪造 token → 401)。semver 排序
+  (含 pre-release)。未覆盖部分是 HTTP 装配与 Storage 往返,由下面的
+  e2e 场景集兜底。
 
 npm devDependencies(vitest)仅开发期使用——运行时保持零依赖(verifier、
 安装器、web 页面不拉任何包)。
