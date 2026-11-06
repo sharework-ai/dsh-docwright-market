@@ -12,6 +12,7 @@
     <div id="auth-box" class="card">
       <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
       <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <div id="auth-error"></div>
       <button id="btn-signin" class="primary" data-i18n="signIn"></button>
       <p class="muted" style="font-size:0.82rem">Reviewing requires an admin profile (profiles.is_admin). <span lang="zh">审核页需要管理员账号(profiles.is_admin)。</span></p>
     </div>
@@ -23,8 +24,14 @@
     MB.header('admin')
 
     document.getElementById('btn-signin').addEventListener('click', async () => {
-      const email = document.getElementById('email').value
+      const email = document.getElementById('email').value.trim()
       const password = document.getElementById('password').value
+      const box = document.getElementById('auth-error')
+      if (!email || !password) {
+        box.innerHTML = '<div class="notice bad">请填写邮箱和密码 / fill in email and password</div>'
+        return
+      }
+      box.innerHTML = ''
       const { error } = await MB.supabase.auth.signInWithPassword({ email, password })
       if (error) alert(error.message)
       else load()

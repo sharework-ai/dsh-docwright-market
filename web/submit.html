@@ -14,6 +14,7 @@
     <div id="auth-box" class="card">
       <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
       <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <div id="auth-error"></div>
       <button id="btn-signin" class="primary" data-i18n="signIn"></button>
       <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
       <p class="muted" style="font-size:0.82rem" id="auth-hint">
@@ -61,18 +62,37 @@
       document.getElementById('form-box').classList.toggle('hidden', !s)
     }
 
-    document.getElementById('btn-signin').addEventListener('click', async () => {
-      const email = document.getElementById('email').value
+    // Empty credentials reach GoTrue as an anonymous signup and die with
+    // "Anonymous sign-ins are disabled" — validate before calling.
+    function readCreds() {
+      const email = document.getElementById('email').value.trim()
       const password = document.getElementById('password').value
-      const { error } = await MB.supabase.auth.signInWithPassword({ email, password })
+      const box = document.getElementById('auth-error')
+      if (!email || !password) {
+        box.innerHTML = '<div class="notice bad">请先填写邮箱和密码(密码至少 6 位) / fill in email and password first</div>'
+        return null
+      }
+      box.innerHTML = ''
+      return { email, password }
+    }
+
+    document.getElementById('btn-signin').addEventListener('click', async () => {
+      const creds = readCreds()
+      if (!creds) return
+      const { error } = await MB.supabase.auth.signInWithPassword(creds)
       if (error) alert(error.message)
       else maybeShowForm()
     })
 
     document.getElementById('btn-signup').addEventListener('click', async () => {
-      const email = document.getElementById('email').value
-      const password = document.getElementById('password').value
-      const { error } = await MB.supabase.auth.signUp({ email, password })
+      const creds = readCreds()
+      if (!creds) return
+      if (creds.password.length < 6) {
+        document.getElementById('auth-error').innerHTML =
+          '<div class="notice bad">密码至少 6 位 / password needs at least 6 characters</div>'
+        return
+      }
+      const { error } = await MB.supabase.auth.signUp(creds)
       if (error) alert(error.message)
       else { await MB.session(); maybeShowForm() }
     })
