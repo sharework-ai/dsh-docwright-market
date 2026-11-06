@@ -122,14 +122,27 @@ scripts/test.sh          # both layers:
                          #             verifier/index.mjs (85% lines/funcs/
                          #             stmts, 75% branches — HTTP endpoints,
                          #             shape logic, archive safety)
-                         #   server-rs: cargo test in the rust-dev container
-                         #             (semver, bearer parsing, sha256)
+                         #   server-rs: cargo test in the rust-dev container;
+                         #             DB-backed cases (sqlx::test) get scratch
+                         #             databases on the local supabase postgres
+                         #             with the real migrations applied
 scripts/test.sh --cov    # + Rust coverage summary (cargo-llvm-cov; needs
                          #             rust-dev:1.3+)
 scripts/e2e.sh           # full chain: submit → verify → review → publish →
                          # install → docwright pack:check on the installed
                          # copy (integration; no unit-test substitute)
 ```
+
+What the unit layer pins down today:
+
+- **verifier** (~92% lines): endpoint behavior, market shape rules, archive
+  safety, content hashing.
+- **server-rs** (~39% lines): all market rules (queue dedup, version
+  uniqueness/monotonicity, ownership, content-change), the publish upsert
+  (first publish + update preserving `added`), the review transition, and the
+  read-side handlers (list/detail/index/tarball incl. the 302-vs-404 and
+  traversal rejection). Semver ordering incl. pre-releases. The uncovered rest
+  is HTTP wiring and Storage round-trips — covered by `scripts/e2e.sh`.
 
 npm devDependencies (vitest) are dev-only — runtime stays zero-dependency
 (verifier, installer, and web pages pull no packages).

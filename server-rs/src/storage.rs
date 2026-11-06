@@ -80,6 +80,32 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     format!("sha256:{}", hex::encode(hasher.finalize()))
 }
 
+/// Idempotently make sure the market buckets exist. Called at boot so a fresh
+/// deployment works from `0001_init.sql` alone (bucket creation needs the
+/// Storage API, not plain SQL — plain-Postgres test databases have no
+/// storage schema). "Already exists" is success.
+pub async fn ensure_buckets(state: &AppState) -> Result<(), AppError> {
+    for (bucket, public) in [(BUCKET_UPLOADS, false), (BUCKET_TARBALLS, true)] {
+        let url = format!("{}/storage/v1/bucket", state.cfg.supabase_api_url);
+        let response = state
+            .http
+            .post(url)
+            .header("authorization", format!("Bearer {}", state.cfg.supabase_secret_key))
+            .json(&serde_json::json!({ "name": bucket, "public": public }))
+            .send()
+            .await?;
+        let status = response.status();
+        let ok = status.is_success() || status == reqwest::StatusCode::CONFLICT;
+        if !ok {
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::internal(format!(
+                "cannot ensure storage bucket {bucket} -> {status}: {body}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

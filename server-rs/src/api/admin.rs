@@ -18,17 +18,17 @@ use crate::state::AppState;
 use crate::storage;
 
 #[derive(sqlx::FromRow)]
-struct SubmissionRow {
-    id: Uuid,
-    pack_name: String,
-    version: String,
-    uploader: Uuid,
-    archive_path: Option<String>,
-    report: Value,
-    category: Option<String>,
-    author: Option<String>,
-    license: Option<String>,
-    homepage: Option<String>,
+pub(crate) struct SubmissionRow {
+    pub(crate) id: Uuid,
+    pub(crate) pack_name: String,
+    pub(crate) version: String,
+    pub(crate) uploader: Uuid,
+    pub(crate) archive_path: Option<String>,
+    pub(crate) report: Value,
+    pub(crate) category: Option<String>,
+    pub(crate) author: Option<String>,
+    pub(crate) license: Option<String>,
+    pub(crate) homepage: Option<String>,
 }
 
 /// GET /api/admin/queue — pending submissions, oldest first, full reports.
@@ -99,15 +99,7 @@ pub async fn review(
 
     match body.action.as_str() {
         "reject" => {
-            sqlx::query(
-                "update submissions set status = 'rejected', review_note = $2, \
-                 reviewed_by = $3, reviewed_at = now() where id = $1",
-            )
-            .bind(id)
-            .bind(body.note.as_deref())
-            .bind(admin.id)
-            .execute(&state.db)
-            .await?;
+            mark_reviewed(&state.db, id, "rejected", body.note.as_deref(), admin.id).await?;
             Ok(Json(json!({ "ok": true, "status": "rejected" })))
         }
         "approve" => {
@@ -157,6 +149,32 @@ async fn publish(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    upsert_published_pack(
+        &state.db,
+        sub,
+        &manifest,
+        &content_hash,
+        has_function_rules,
+        &record_path,
+        &sha,
+    )
+    .await?;
+    mark_reviewed(&state.db, sub.id, "approved", note, admin.id).await?;
+    Ok(())
+}
+
+/// Catalog write: insert the first publish or overwrite in place (updates
+/// keep `added`, bump `updated`). Split from `publish` so tests can drive it
+/// against a scratch database without Storage.
+pub(crate) async fn upsert_published_pack(
+    db: &sqlx::PgPool,
+    sub: &SubmissionRow,
+    manifest: &Value,
+    content_hash: &str,
+    has_function_rules: bool,
+    tarball_path: &str,
+    tarball_sha256: &str,
+) -> Result<(), AppError> {
     sqlx::query(
         "insert into packs (name, version, description, category, author, author_id, license, \
          homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
@@ -194,19 +212,30 @@ async fn publish(
     .bind(manifest.get("artifactPrefix").and_then(Value::as_str))
     .bind(has_function_rules)
     .bind(content_hash)
-    .bind(&record_path)
-    .bind(sha)
-    .execute(&state.db)
+    .bind(tarball_path)
+    .bind(tarball_sha256)
+    .execute(db)
     .await?;
+    Ok(())
+}
 
+/// Shared review-state transition (approve/reject) with reviewer stamp.
+pub(crate) async fn mark_reviewed(
+    db: &sqlx::PgPool,
+    submission_id: Uuid,
+    status: &str,
+    note: Option<&str>,
+    reviewer: Uuid,
+) -> Result<(), AppError> {
     sqlx::query(
-        "update submissions set status = 'approved', review_note = $2, \
-         reviewed_by = $3, reviewed_at = now() where id = $1",
+        "update submissions set status = $2, review_note = $3, \
+         reviewed_by = $4, reviewed_at = now() where id = $1",
     )
-    .bind(sub.id)
+    .bind(submission_id)
+    .bind(status)
     .bind(note)
-    .bind(admin.id)
-    .execute(&state.db)
+    .bind(reviewer)
+    .execute(db)
     .await?;
     Ok(())
 }

@@ -109,13 +109,23 @@ scripts/test.sh          # 两层一起跑:
                          #   verifier:vitest + v8 覆盖率门
                          #             (verifier/index.mjs 行/函数/语句 85%、
                          #             分支 75%——HTTP 端点、形状逻辑、解包安全)
-                         #   server-rs:rust-dev 容器内 cargo test
-                         #             (semver、bearer 解析、sha256)
+                         #   server-rs:rust-dev 容器内 cargo test;DB 用例
+                         #             (sqlx::test)在本机 supabase postgres 上
+                         #             建独立 scratch 库并应用真实 migrations
 scripts/test.sh --cov    # 追加 Rust 覆盖率摘要(cargo-llvm-cov,需
                          #             rust-dev:1.3+)
 scripts/e2e.sh           # 全链集成:投稿 → 校验 → 审核 → 发布 → 安装 →
                          # 对装出的副本再跑 docwright pack:check
 ```
+
+单元层目前钉住的行为:
+
+- **verifier**(约 92% 行):端点行为、市场形状规则、解包安全、内容哈希。
+- **server-rs**(约 39% 行):全部市场规则(队列去重、版本唯一/递增、
+  所有权、内容变更要求)、发布 upsert(首发 + 更新保留 added)、审核状态
+  迁移、读侧 handler(list/detail/index/tarball,含 302/404 与穿越拒绝)、
+  semver 排序(含 pre-release)。未覆盖部分是 HTTP 装配与 Storage 往返,
+  由 `scripts/e2e.sh` 兜底。
 
 npm devDependencies(vitest)仅开发期使用——运行时保持零依赖(verifier、
 安装器、web 页面不拉任何包)。

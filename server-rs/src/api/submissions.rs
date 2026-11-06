@@ -122,7 +122,7 @@ pub async fn submit(
     report["checkedAt"] = Value::String(now_rfc3339());
 
     // 2. Market rules (ownership, version monotonicity, queue dedup).
-    check_submission_rules(&state, &user, &pack_name, &version, &content_hash).await?;
+    check_submission_rules(&state.db, &user, &pack_name, &version, &content_hash).await?;
 
     // 3. Archive the raw upload, then enqueue for human review.
     let submission_id = Uuid::new_v4();
@@ -204,8 +204,12 @@ fn non_empty(value: Option<String>, name: &str) -> Result<String, AppError> {
     }
 }
 
-async fn check_submission_rules(
-    state: &AppState,
+/// Market rules enforced purely in SQL + code, independent of HTTP and the
+/// verifier: queue dedup, version uniqueness, ownership, strict version
+/// monotonicity, content change. `pub(crate)` so the integration tests can
+/// drive it against a scratch database.
+pub(crate) async fn check_submission_rules(
+    db: &sqlx::PgPool,
     user: &AuthUser,
     pack_name: &str,
     version: &str,
@@ -214,7 +218,7 @@ async fn check_submission_rules(
     let pending: Option<(Uuid,)> =
         sqlx::query_as("select id from submissions where pack_name = $1 and status = 'pending'")
             .bind(pack_name)
-            .fetch_optional(&state.db)
+            .fetch_optional(db)
             .await?;
     if pending.is_some() {
         return Err(AppError::conflict(
@@ -227,7 +231,7 @@ async fn check_submission_rules(
     )
     .bind(pack_name)
     .bind(version)
-    .fetch_optional(&state.db)
+    .fetch_optional(db)
     .await?;
     if taken.is_some() {
         return Err(AppError::conflict(format!(
@@ -245,7 +249,7 @@ async fn check_submission_rules(
         "select author_id, version, content_hash from packs where name = $1",
     )
     .bind(pack_name)
-    .fetch_optional(&state.db)
+    .fetch_optional(db)
     .await?;
     if let Some(existing) = existing {
         if existing.author_id != user.id {

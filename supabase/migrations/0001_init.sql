@@ -1,4 +1,4 @@
--- 0001_init.sql — docwright pack market schema.
+-- 0001_init.sql — docwright pack market schema (tables only).
 -- Apply via: ~/projects/commons/supabase/setup.sh apply-migration <this file>
 --
 -- Access model: the market service connects with the service_role-level secret
@@ -6,8 +6,9 @@
 -- for v1 — the anon/publishable key is never exposed to untrusted callers.
 -- Revisit RLS when moving reads to supabase-js direct.
 --
--- Storage buckets are created here too: uploads (private audit trail of raw
--- submissions) and tarballs (public read, install-time downloads).
+-- Storage buckets live in ../provision/storage-buckets.sql (kept out of this
+-- file so the schema is testable against a plain Postgres via sqlx::test; the
+-- service also idempotently ensures buckets at boot).
 
 -- Author profiles: admin flag + display name. One row per signup; the admin
 -- bootstrap is a manual UPDATE after your own signup (see README):
@@ -68,10 +69,3 @@ create table if not exists submissions (
 
 create index if not exists submissions_pending_idx
   on submissions (created_at) where status = 'pending';
-
--- Storage buckets: private upload archive + public tarball downloads.
-insert into storage.buckets (id, name, public)
-values
-  ('uploads', 'uploads', false),
-  ('tarballs', 'tarballs', true)
-on conflict (id) do nothing;

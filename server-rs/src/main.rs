@@ -46,6 +46,11 @@ async fn main() {
         jwks: tokio::sync::Mutex::new(None),
     });
 
+    // Fresh deployments need the market buckets; idempotent, fails loud.
+    storage::ensure_buckets(&state)
+        .await
+        .unwrap_or_else(|e| panic!("storage buckets unusable: {}", e.message));
+
     let app = Router::new()
         .route("/config.json", get(frontend_config))
         .route("/api/submissions", post(api::submissions::submit))

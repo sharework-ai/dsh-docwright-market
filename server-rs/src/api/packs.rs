@@ -130,7 +130,9 @@ pub async fn tarball(
     State(state): State<Arc<AppState>>,
     Path(file): Path<String>,
 ) -> Result<Response, AppError> {
-    if !file.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_') {
+    if !file.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_')
+        || file.contains("..")
+    {
         return Err(AppError::bad_request("malformed tarball name"));
     }
     let object_path = format!("tarballs/{file}");
