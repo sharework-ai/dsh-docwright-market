@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -143,8 +143,17 @@ pub async fn tarball(
     .fetch_optional(&state.db)
     .await?;
     match hit {
-        // public_url takes the object path *inside* the bucket — strip ours.
-        Some(_) => Ok(Redirect::to(&storage::public_url(&state, &file)).into_response()),
+        // Proxy instead of 302: the Storage endpoint is cluster-internal
+        // (supabase-envoy svc) — external clients could never follow that
+        // redirect. Small tarballs, one extra hop through the server is fine.
+        Some(_) => {
+            let bytes = storage::download_public(&state, storage::BUCKET_TARBALLS, &file).await?;
+            Ok((
+                [(axum::http::header::CONTENT_TYPE, "application/gzip")],
+                axum::body::Body::from(bytes),
+            )
+                .into_response())
+        }
         None => Err(AppError::not_found("no such pack tarball")),
     }
 }

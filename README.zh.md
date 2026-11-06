@@ -114,10 +114,7 @@ scripts/test.sh          # 两层一起跑:
                          #             建独立 scratch 库并应用真实 migrations
 scripts/test.sh --cov    # 追加 Rust 覆盖率摘要(cargo-llvm-cov,需
                          #             rust-dev:1.3+)
-scripts/e2e.sh           # 集成场景:快乐链(投稿 → 校验 → 审核 → 发布 →
-                         # 安装 → 对装出副本再跑 pack:check)+ 负路径规则:
-                         # 401 未认证、400 非法分类、409 待审重复与版本占用、
-                         # 403 非管理员访问与冒名更新
+scripts/e2e/run.sh       # 场景套件(见下方 "E2E 场景" 一节)
 ```
 
 单元层目前钉住的行为:
@@ -135,6 +132,43 @@ scripts/e2e.sh           # 集成场景:快乐链(投稿 → 校验 → 审核 �
 
 npm devDependencies(vitest)仅开发期使用——运行时保持零依赖(verifier、
 安装器、web 页面不拉任何包)。
+
+## 部署到本机 k3s(无需常驻脚本)
+
+Rust 主服务为镜像;verifier sidecar 以 hostPath 挂载宿主的
+docwright + deepseek-harness checkout(单节点 k3s 的本机部署语义:模块
+解析与宿主 pack:check 环境 1:1,必然一致)。集群内直连 supabase 各服务,
+彻底告别 port-forward:
+
+```sh
+deploy/build.sh               # 构建 + 导入 localhost/market-{server,verifier}:<tag>
+deploy/deploy.sh --tag <tag>  # ns + secret + deployments + IngressRoute
+```
+
+部署后的入口(本机 hosts 条目 `192.168.2.1 dm.shrwk.com` 经 k3s traefik 走
+通配符证书 TLS;frpc 的 `dm-web-macus` 代理把同一路由暴露到公网):
+
+- 浏览/投稿:`https://dm.shrwk.com`
+- API:`https://dm.shrwk.com/api/index`
+
+局域网 hosts 路由与公网 frpc 路由终止在同一个 IngressRoute 上,不会漂移。
+
+## E2E 场景
+
+场景在 `scripts/e2e/scenarios/*.sh`,一个主题一个文件,彼此隔离(目录重置 +
+独立账号)。运行器聚合结果:
+
+```sh
+scripts/e2e/run.sh                # 全部场景,打已部署的集群
+scripts/e2e/run.sh --only happy-chain,rules
+scripts/e2e/run.sh --list         # 场景名列表
+scripts/e2e/run.sh --local        # 宿主进程模式(集群部署前)
+```
+
+现有场景:`happy-chain`(投稿 → 校验 → 审核 → 发布 → 目录/索引一致)、
+`status-polling`(作者可见状态)、`rules`(401 / 400 / 403 队列 / 403 冒名 /
+409 版本 / 409 重复投稿)、`builtin-name-collision`(形状门拒绝,零落库)、
+`consumer-install`(从真实市场安装 → 装出副本过 pack:check → --force 重装)。
 
 ## 路线图(有意延后)
 

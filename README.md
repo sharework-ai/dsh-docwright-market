@@ -128,12 +128,7 @@ scripts/test.sh          # both layers:
                          #             with the real migrations applied
 scripts/test.sh --cov    # + Rust coverage summary (cargo-llvm-cov; needs
                          #             rust-dev:1.3+)
-scripts/e2e.sh           # integration scenarios: the happy chain (submit →
-                         # verify → review → publish → install → docwright
-                         # pack:check on the installed copy) plus negative
-                         # rules: 401 unauthenticated, 400 bad category,
-                         # 409 pending duplicate & reused version, 403
-                         # non-admin access and cross-account updates
+scripts/e2e/run.sh       # scenario suite (see "E2E scenarios" below)
 ```
 
 What the unit layer pins down today:
@@ -154,6 +149,47 @@ What the unit layer pins down today:
 
 npm devDependencies (vitest) are dev-only — runtime stays zero-dependency
 (verifier, installer, and web pages pull no packages).
+
+## Deploy to the local k3s (no scripts to keep running)
+
+The Rust server ships as an image; the verifier sidecar mounts the host's
+own docwright + deepseek-harness checkouts via hostPath (single-node k3s
+semantics: module resolution is 1:1 with the machine where pack:check is
+proven). In-cluster wiring removes the need for port-forwards entirely:
+
+```sh
+deploy/build.sh            # build + import localhost/market-{server,verifier}:<tag>
+deploy/deploy.sh --tag <tag>   # ns + secret + deployments + IngressRoute
+```
+
+Entry points afterwards (hosts entry `192.168.2.1 dm.shrwk.com` routes the
+wildcard-cert TLS via k3s traefik; the frpc `dm-web-macus` proxy exposes the
+same route publicly):
+
+- browse/submit: `https://dm.shrwk.com`
+- API: `https://dm.shrwk.com/api/index`
+
+Both the LAN hosts route and the public frpc route terminate on the same
+IngressRoute, so they cannot drift apart.
+
+## E2E scenarios
+
+Scenarios live in `scripts/e2e/scenarios/*.sh`, one per theme, each isolated
+(catalog reset + fresh accounts). The runner aggregates:
+
+```sh
+scripts/e2e/run.sh                # all scenarios against the deployed cluster
+scripts/e2e/run.sh --only happy-chain,rules
+scripts/e2e/run.sh --list         # scenario names
+scripts/e2e/run.sh --local        # host-process mode (before a cluster deploy)
+```
+
+Current scenarios: `happy-chain` (submit → verify → approve → publish →
+catalog/index agreement), `status-polling` (author-visible states),
+`rules` (401 / 400 / 403 queue / 403 cross-account / 409 version / 409
+resubmission), `builtin-name-collision` (refused at the shape gate, nothing
+stored), `consumer-install` (install from the live market → docwright
+pack:check on the installed copy → --force overwrite).
 
 ## Roadmap (deferred on purpose)
 

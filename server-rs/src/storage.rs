@@ -40,6 +40,27 @@ pub async fn upload(
     }
 }
 
+/// Public-object fetch (no auth header) for proxying downloads.
+pub async fn download_public(
+    state: &AppState,
+    bucket: &str,
+    object_path: &str,
+) -> Result<Vec<u8>, AppError> {
+    let url = format!(
+        "{}/storage/v1/object/public/{}/{}",
+        state.cfg.supabase_api_url, bucket, object_path
+    );
+    let response = state.http.get(url).send().await?;
+    let status = response.status();
+    if status.is_success() {
+        Ok(response.bytes().await?.to_vec())
+    } else {
+        Err(AppError::not_found(format!(
+            "storage object {bucket}/{object_path} -> {status}"
+        )))
+    }
+}
+
 pub async fn download(
     state: &AppState,
     bucket: &str,
@@ -95,9 +116,14 @@ pub async fn ensure_buckets(state: &AppState) -> Result<(), AppError> {
             .send()
             .await?;
         let status = response.status();
-        let ok = status.is_success() || status == reqwest::StatusCode::CONFLICT;
+        let body = response.text().await.unwrap_or_default();
+        // "Already exists" surfaces as HTTP 400 with an inner 409 code, or
+        // 409/200 depending on the Storage build — accept any of those.
+        let ok = status.is_success()
+            || body.contains("BucketAlreadyExists")
+            || body.contains("Duplicate")
+            || status == reqwest::StatusCode::CONFLICT;
         if !ok {
-            let body = response.text().await.unwrap_or_default();
             return Err(AppError::internal(format!(
                 "cannot ensure storage bucket {bucket} -> {status}: {body}"
             )));

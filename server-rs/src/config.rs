@@ -45,8 +45,16 @@ fn env_or(name: &str, default: &str) -> String {
 impl Config {
     pub fn from_env() -> Self {
         let port: u16 = env_or("PORT", "8398").parse().expect("PORT must be a port number");
+        // Loopback by default; LAN-facing deployments set LISTEN_HOST=192.168.2.1
+        // (k3s traefik routes dm.shrwk.com here) or 0.0.0.0.
+        let host = env_or("LISTEN_HOST", "127.0.0.1");
+        let addr = if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+            SocketAddr::from((ip, port))
+        } else {
+            SocketAddr::from(([127, 0, 0, 1], port))
+        };
         Self {
-            listen: SocketAddr::from(([127, 0, 0, 1], port)),
+            listen: addr,
             supabase_api_url: env("SUPABASE_API_URL").trim_end_matches('/').to_string(),
             supabase_secret_key: env("SUPABASE_SECRET_KEY"),
             supabase_publishable_key: env("SUPABASE_PUBLISHABLE_KEY"),

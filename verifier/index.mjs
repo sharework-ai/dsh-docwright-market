@@ -32,6 +32,9 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const PORT = Number(process.env.VERIFIER_PORT ?? 8399)
+// Loopback for host runs; containers set VERIFIER_HOST=0.0.0.0 (readiness probes
+// and the cluster service hit the pod IP, not loopback).
+const HOST = process.env.VERIFIER_HOST ?? '127.0.0.1'
 const DOCWRIGHT_ROOT = process.env.DOCWRIGHT_ROOT ?? ''
 const TMP_ROOT = process.env.VERIFIER_TMP ?? path.join(os.tmpdir(), 'docwright-market-verifier')
 const MAX_BYTES = Number(process.env.VERIFIER_MAX_BYTES ?? 50 * 1024 * 1024)
@@ -196,9 +199,13 @@ export async function contentHashOf(dir) {
 // ---- the real gate: docwright's own pack:check ------------------------------
 
 async function runPackCheck(checkRoot) {
+  // Direct node+tsx invocation: pnpm run would drag in package-manager
+  // version switching (docwright pins pnpm@11.7.0 via packageManager, and
+  // self-managed downloads fail offline). tsx lives in docwright's
+  // node_modules — the loader IS the linter, no pnpm involved.
   const result = await runRaw(
-    'pnpm',
-    ['run', 'pack:check', '--', checkRoot, '--with', 'packs'],
+    'node',
+    ['--import', 'tsx/esm', 'scripts/pack-check.ts', '--', checkRoot, '--with', 'packs'],
     { cwd: DOCWRIGHT_ROOT },
   )
   return { code: result.code, output: (result.stdout + result.stderr).trim() }
@@ -258,6 +265,14 @@ async function handleVerify(req, res) {
     const checkRoot = path.join(workDir, 'check-root')
     await fs.mkdir(path.join(checkRoot, report.packName), { recursive: true })
     await fs.cp(found, path.join(checkRoot, report.packName), { recursive: true })
+    // Pin the module type: a pack's functions.js is ESM (it exports rules),
+    // and an unpacked directory without a package.json would leave .js files
+    // to node's default CJS interpretation — breaking dynamic import on
+    // node versions where the fallback differs.
+    await fs.writeFile(
+      path.join(checkRoot, 'package.json'),
+      JSON.stringify({ type: 'module', private: true }),
+    )
 
     const check = await runPackCheck(checkRoot)
     report.checkOutput = check.output
@@ -328,7 +343,7 @@ const server = http.createServer(async (req, res) => {
 export async function start(port = PORT) {
   await failFast()
   return new Promise(resolve => {
-    server.listen(port, '127.0.0.1', () => resolve(server))
+    server.listen(port, HOST, () => resolve(server))
   })
 }
 
