@@ -6,6 +6,7 @@
 
 # Node
 node_modules/
+coverage/
 
 # OS noise
 .DS_Store

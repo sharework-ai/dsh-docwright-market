@@ -117,13 +117,22 @@ a working `pack:check`), `VERIFIER_PORT`, `VERIFIER_TMP`, `VERIFIER_MAX_BYTES`.
 ## Verification
 
 ```sh
-node --test verifier/test/verifier.test.mjs   # shape logic
-(cd server-rs && cargo test)                   # semver rules
-scripts/e2e.sh                                 # full chain: submit → verify →
-                                               # review → publish → install →
-                                               # docwright pack:check on the
-                                               # installed copy
+scripts/test.sh          # both layers:
+                         #   verifier: vitest + v8 coverage gates over
+                         #             verifier/index.mjs (85% lines/funcs/
+                         #             stmts, 75% branches — HTTP endpoints,
+                         #             shape logic, archive safety)
+                         #   server-rs: cargo test in the rust-dev container
+                         #             (semver, bearer parsing, sha256)
+scripts/test.sh --cov    # + Rust coverage summary (cargo-llvm-cov; needs
+                         #             rust-dev:1.3+)
+scripts/e2e.sh           # full chain: submit → verify → review → publish →
+                         # install → docwright pack:check on the installed
+                         # copy (integration; no unit-test substitute)
 ```
+
+npm devDependencies (vitest) are dev-only — runtime stays zero-dependency
+(verifier, installer, and web pages pull no packages).
 
 ## Roadmap (deferred on purpose)
 

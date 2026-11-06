@@ -35,6 +35,23 @@ fn bearer_token(headers: &HeaderMap) -> Result<String, AppError> {
     Ok(token.to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bearer_extraction() {
+        let mut headers = HeaderMap::new();
+        assert!(bearer_token(&headers).is_err(), "missing header must fail");
+
+        headers.insert(axum::http::header::AUTHORIZATION, "Basic dXNlcjpwYXNz".parse().unwrap());
+        assert!(bearer_token(&headers).is_err(), "non-Bearer scheme must fail");
+
+        headers.insert(axum::http::header::AUTHORIZATION, "Bearer abc.def.ghi".parse().unwrap());
+        assert_eq!(bearer_token(&headers).unwrap(), "abc.def.ghi");
+    }
+}
+
 pub async fn require_user(state: &AppState, headers: &HeaderMap) -> Result<AuthUser, AppError> {
     let token = bearer_token(headers)?;
     verify_token(state, &token)

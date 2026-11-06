@@ -2,7 +2,7 @@
   // Rust toolchain lives in the devcontainer image (macus installs no local
   // toolchains); the image is built from ~/projects/devcontainer/rust-dev.
   "name": "dsh-docwright-market (rust-dev)",
-  "image": "localhost/rust-dev:1.1",
+  "image": "localhost/rust-dev:1.3",
   "runArgs": ["--userns=keep-id"],
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
   "workspaceFolder": "/workspace",

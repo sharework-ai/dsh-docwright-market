@@ -79,3 +79,16 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     hasher.update(bytes);
     format!("sha256:{}", hex::encode(hasher.finalize()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sha256_known_vector() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+}

@@ -40,7 +40,7 @@ VERIFIER_PID=$!
 
 # --- build + run the market service ------------------------------------------
 echo "building server-rs (rust-dev container)..."
-IMG=crpi-nt9q5pom2saqwub9.cn-zhangjiakou.personal.cr.aliyuncs.com/sharework/rust-dev:1.2
+IMG=localhost/rust-dev:1.3
 podman run --rm --userns=keep-id -v "$M":/workspace -w /workspace/server-rs \
   -v "$HOME/devcache/cargo/registry":/home/app/.cargo/registry \
   "$IMG" cargo build

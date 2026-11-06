@@ -271,17 +271,20 @@ async function handleVerify(req, res) {
 function saveBody(req, dest) {
   return new Promise((resolve, reject) => {
     let size = 0
+    let tooBig = false
     const out = createWriteStream(dest)
     req.on('data', chunk => {
+      if (tooBig) return // drain the rest so the client gets a clean 400
       size += chunk.length
-      if (size > MAX_BYTES) {
-        req.destroy()
-        reject(Object.assign(new Error(`body exceeds ${MAX_BYTES} bytes`), { tooBig: true }))
-        return
-      }
+      if (size > MAX_BYTES) { tooBig = true; return }
       out.write(chunk)
     })
-    req.on('end', () => { out.end(() => resolve(size)) })
+    req.on('end', () => {
+      out.end(() => {
+        if (tooBig) reject(Object.assign(new Error(`body exceeds ${MAX_BYTES} bytes`), { tooBig: true }))
+        else resolve(size)
+      })
+    })
     req.on('error', error => reject(error))
     out.on('error', error => reject(error))
   })
@@ -320,13 +323,20 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-// Only boot (and fail-fast on config) when run as the entry module; the test
-// suite imports this file for its pure helpers and must not bind a server.
+// Boot helper: fail-fast on config, then listen. Exported so the test suite
+// can start the real server on an ephemeral port and exercise HTTP behavior.
+export async function start(port = PORT) {
+  await failFast()
+  return new Promise(resolve => {
+    server.listen(port, '127.0.0.1', () => resolve(server))
+  })
+}
+
+// Only bind a port when run as the entry module; test files import this
+// module for its helpers and call start() themselves when needed.
 const isMain = process.argv[1]
   && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 if (isMain) {
-  await failFast()
-  server.listen(PORT, '127.0.0.1', () => {
-    console.log(`verifier listening on 127.0.0.1:${PORT} (docwright: ${DOCWRIGHT_ROOT})`)
-  })
+  await start()
+  console.log(`verifier listening on 127.0.0.1:${PORT} (docwright: ${DOCWRIGHT_ROOT})`)
 }

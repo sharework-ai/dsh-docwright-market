@@ -1,0 +1,15 @@
+{
+  "name": "dsh-docwright-market-workspace",
+  "private": true,
+  "type": "module",
+  "description": "dev-only tooling (test/coverage) for dsh-docwright-market; runtime stays zero-dependency",
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.all=false --coverage.include='verifier/index.mjs' --coverage.thresholds.lines=85 --coverage.thresholds.functions=85 --coverage.thresholds.statements=85 --coverage.thresholds.branches=75",
+    "test:rust": "bash scripts/test.sh --rust-only"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "vitest": "^3.2.4"
+  }
+}

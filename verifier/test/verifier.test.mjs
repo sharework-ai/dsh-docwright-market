@@ -1,6 +1,6 @@
 // Unit tests for the verifier's market-level shape logic. The real docwright
 // pack:check round is exercised by scripts/e2e.sh, not here.
-import { test } from 'node:test'
+import { test } from 'vitest'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'

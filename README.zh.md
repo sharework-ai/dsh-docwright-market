@@ -105,12 +105,20 @@ Verifier 环境变量:`DOCWRIGHT_ROOT`(必填,docwright checkout,需含 `packs/`
 ## 验证
 
 ```sh
-node --test verifier/test/verifier.test.mjs   # 形状逻辑
-(cd server-rs && cargo test)                   # semver 规则
-scripts/e2e.sh                                 # 全链:投稿 → 校验 → 审核 →
-                                               # 发布 → 安装 → 对装出的副本
-                                               # 再跑 docwright pack:check
+scripts/test.sh          # 两层一起跑:
+                         #   verifier:vitest + v8 覆盖率门
+                         #             (verifier/index.mjs 行/函数/语句 85%、
+                         #             分支 75%——HTTP 端点、形状逻辑、解包安全)
+                         #   server-rs:rust-dev 容器内 cargo test
+                         #             (semver、bearer 解析、sha256)
+scripts/test.sh --cov    # 追加 Rust 覆盖率摘要(cargo-llvm-cov,需
+                         #             rust-dev:1.3+)
+scripts/e2e.sh           # 全链集成:投稿 → 校验 → 审核 → 发布 → 安装 →
+                         # 对装出的副本再跑 docwright pack:check
 ```
+
+npm devDependencies(vitest)仅开发期使用——运行时保持零依赖(verifier、
+安装器、web 页面不拉任何包)。
 
 ## 路线图(有意延后)
 
