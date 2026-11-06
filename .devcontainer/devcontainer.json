@@ -1,0 +1,20 @@
+{
+  // Rust toolchain lives in the devcontainer image (macus installs no local
+  // toolchains); the image is built from ~/projects/devcontainer/rust-dev.
+  "name": "dsh-docwright-market (rust-dev)",
+  "image": "localhost/rust-dev:1.1",
+  "runArgs": ["--userns=keep-id"],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    // Cargo registry cache on host disk; mounted as a sub-path so the image's
+    // /home/app/.cargo/config.toml (rsproxy settings) stays in place.
+    "source=${localEnv:HOME}/devcache/cargo/registry,target=/home/app/.cargo/registry,type=bind"
+  ],
+  "postCreateCommand": "rustup component add rust-analyzer clippy",
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer", "editorconfig.editorconfig"]
+    }
+  }
+}

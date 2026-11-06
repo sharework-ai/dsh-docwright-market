@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Submit — docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <h1 data-i18n="submitTitle"></h1>
+    <p class="muted" data-i18n="submitHint"></p>
+
+    <div id="auth-box" class="card">
+      <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <button id="btn-signin" class="primary" data-i18n="signIn"></button>
+      <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
+      <p class="muted" style="font-size:0.82rem" id="auth-hint">
+        Sign-up confirms instantly on this host (no SMTP). <span lang="zh">本机自托管无邮件服务,注册即时生效。</span>
+      </p>
+    </div>
+
+    <div id="form-box" class="hidden">
+      <form id="submit-form">
+        <label class="field"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
+        <label class="field"><span data-i18n="author"></span><input id="author" required></label>
+        <label class="field"><span data-i18n="category"></span>
+          <select id="category">
+            <option value="estimation">estimation</option>
+            <option value="dev" selected>dev</option>
+            <option value="pm">pm</option>
+            <option value="test">test</option>
+            <option value="docs">docs</option>
+            <option value="other">other</option>
+          </select>
+        </label>
+        <label class="field"><span data-i18n="license"></span>
+          <select id="license">
+            <option value="MIT" selected>MIT</option>
+            <option value="Apache-2.0">Apache-2.0</option>
+            <option value="BSD-3-Clause">BSD-3-Clause</option>
+            <option value="BSD-2-Clause">BSD-2-Clause</option>
+            <option value="ISC">ISC</option>
+          </select>
+        </label>
+        <label class="field"><span data-i18n="homepage"></span><input id="homepage" type="url" placeholder="https://…"></label>
+        <button class="primary" type="submit" id="btn-send" data-i18n="send"></button>
+      </form>
+      <div id="result"></div>
+    </div>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    MB.header('submit')
+
+    async function maybeShowForm() {
+      const s = await MB.session()
+      document.getElementById('auth-box').classList.toggle('hidden', !!s)
+      document.getElementById('form-box').classList.toggle('hidden', !s)
+    }
+
+    document.getElementById('btn-signin').addEventListener('click', async () => {
+      const email = document.getElementById('email').value
+      const password = document.getElementById('password').value
+      const { error } = await MB.supabase.auth.signInWithPassword({ email, password })
+      if (error) alert(error.message)
+      else maybeShowForm()
+    })
+
+    document.getElementById('btn-signup').addEventListener('click', async () => {
+      const email = document.getElementById('email').value
+      const password = document.getElementById('password').value
+      const { error } = await MB.supabase.auth.signUp({ email, password })
+      if (error) alert(error.message)
+      else { await MB.session(); maybeShowForm() }
+    })
+
+    document.getElementById('submit-form').addEventListener('submit', async event => {
+      event.preventDefault()
+      const result = document.getElementById('result')
+      const file = document.getElementById('archive').files[0]
+      if (!file) return
+      const btn = document.getElementById('btn-send')
+      btn.disabled = true
+      btn.textContent = MB.t('verifying')
+      result.innerHTML = ''
+      try {
+        const form = new FormData()
+        form.append('archive', file)
+        form.append('author', document.getElementById('author').value)
+        form.append('category', document.getElementById('category').value)
+        form.append('license', document.getElementById('license').value)
+        form.append('homepage', document.getElementById('homepage').value)
+        const res = await MB.api('/api/submissions', { method: 'POST', body: form, auth: true })
+        if (res.ok) {
+          result.innerHTML = `<div class="notice ok">${MB.t('accepted')}</div>
+            <p><a href="#" id="status-link">${MB.t('refresh')}</a></p>`
+          result.querySelector('#status-link').addEventListener('click', e => { e.preventDefault(); poll(res.id) })
+        } else {
+          result.innerHTML = `<div class="notice bad">${MB.t('rejectedMachine')}</div>
+            ${renderReport(res.report)}`
+        }
+      } catch (e) {
+        result.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      } finally {
+        btn.disabled = false
+        btn.textContent = MB.t('send')
+      }
+    })
+
+    async function poll(id) {
+      const res = await MB.api(`/api/submissions/${id}`, { auth: true })
+      document.getElementById('result').innerHTML = `
+        <div class="notice ${res.status === 'approved' ? 'ok' : res.status === 'rejected' ? 'bad' : 'info'}">
+          ${MB.t('status')}: ${MB.esc(res.status)}${res.reviewNote ? ' — ' + MB.esc(res.reviewNote) : ''}
+        </div>${renderReport(res.report)}`
+    }
+
+    function renderReport(report) {
+      if (!report) return ''
+      const problems = (report.problems || [])
+        .map(p => `<li>${MB.esc(p)}</li>`).join('')
+      return `<section class="block">
+        <pre class="sheet ${problems.length ? 'warn' : ''}">${MB.esc(problems ? 'PROBLEMS:\n' + report.problems.join('\n') + '\n\n' : '')}${MB.esc(report.checkOutput || '')}</pre>
+      </section>`
+    }
+
+    maybeShowForm()
+  </script>
+</body>
+</html>

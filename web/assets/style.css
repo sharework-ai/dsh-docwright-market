@@ -1,0 +1,114 @@
+/* docwright pack market — shared styles (no build step, no framework). */
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --ink: #1a202c;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --accent: #2b6cb0;
+  --accent-ink: #ffffff;
+  --ok: #2f855a;
+  --warn: #b7791f;
+  --bad: #c53030;
+  --code-bg: #1a202c;
+  --code-ink: #e2e8f0;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.55;
+}
+header.site {
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  padding: 0.6rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+header.site .brand { font-weight: 700; font-size: 1.05rem; text-decoration: none; color: var(--ink); }
+header.site nav { display: flex; gap: 0.9rem; align-items: center; flex-wrap: wrap; }
+header.site a { color: var(--accent); text-decoration: none; }
+header.site .spacer { flex: 1; }
+.lang-btn { cursor: pointer; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 0.15rem 0.6rem; }
+main { max-width: 1080px; margin: 1.4rem auto 3rem; padding: 0 1.2rem; }
+h1 { font-size: 1.5rem; margin: 0.2rem 0 0.8rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+}
+.card h3 { margin: 0 0 0.3rem; font-size: 1.02rem; }
+.card h3 a { color: var(--ink); text-decoration: none; }
+.card .desc { color: var(--muted); font-size: 0.92rem; min-height: 2.6em; }
+.meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.chip, .badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+}
+.badge.code { border-color: var(--warn); color: var(--warn); }
+.chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.6rem 0 1.1rem; }
+.chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.search { width: 100%; max-width: 420px; padding: 0.5rem 0.8rem; border: 1px solid var(--line); border-radius: 8px; font-size: 0.95rem; }
+table.kv { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+table.kv td { border-bottom: 1px solid var(--line); padding: 0.45rem 0.5rem; vertical-align: top; }
+table.kv td:first-child { color: var(--muted); white-space: nowrap; width: 11em; }
+pre.sheet {
+  background: var(--code-bg);
+  color: var(--code-ink);
+  padding: 1rem;
+  border-radius: 10px;
+  overflow: auto;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+pre.warn { border: 1px solid var(--bad); }
+.cmd {
+  display: block;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  overflow: auto;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1.2rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+button.secondary { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem 1.2rem; cursor: pointer; }
+button.danger { background: var(--bad); color: #fff; border: none; border-radius: 8px; padding: 0.55rem 1.2rem; cursor: pointer; }
+label.field { display: block; margin: 0.8rem 0; }
+label.field span { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.25rem; }
+label.field input, label.field select {
+  width: 100%; max-width: 460px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.notice { border-radius: 8px; padding: 0.7rem 1rem; margin: 0.8rem 0; font-size: 0.92rem; }
+.notice.ok { background: #f0fff4; border: 1px solid var(--ok); color: var(--ok); }
+.notice.bad { background: #fff5f5; border: 1px solid var(--bad); color: var(--bad); }
+.notice.info { background: #ebf8ff; border: 1px solid var(--accent); color: var(--accent); }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+section.block { margin: 1.4rem 0; }
+footer.site { text-align: center; color: var(--muted); font-size: 0.82rem; padding: 1.5rem; }

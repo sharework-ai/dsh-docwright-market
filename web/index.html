@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <h1>docwright pack market</h1>
+    <p class="muted">
+      Scenario packs for docwright (@sharework-ai/dsh-docwright): generator prompts, JSON schemas,
+      checking rules and templates — machine-verified with <code>pack:check</code>, human-reviewed,
+      installed into your <code>packsDir</code>.
+      <span lang="zh">docwright 的场景 pack 市场:生成 prompt、JSON Schema、校验规则与模板;
+      机器校验(<code>pack:check</code> 全绿)+ 人工审核,装进你的 <code>packsDir</code> 即用。</span>
+    </p>
+    <input id="search" class="search" data-i18n-ph="searchHint">
+    <div id="chips" class="chips"></div>
+    <div id="packs" class="grid"></div>
+    <p id="empty" class="muted hidden" data-i18n="noPacks"></p>
+  </main>
+  <footer class="site">
+    <span>
+      Install: <code>node install.mjs &lt;pack-name&gt;</code> —
+      <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>
+    </span>
+  </footer>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    let all = []
+    let activeCategory = null
+
+    function render() {
+      const q = document.getElementById('search').value.trim().toLowerCase()
+      const list = all.filter(p => {
+        if (activeCategory && p.category !== activeCategory) return false
+        if (!q) return true
+        const hay = [p.name, p.author, MB.localizedDesc(p.description)].join(' ').toLowerCase()
+        return hay.includes(q)
+      })
+      const grid = document.getElementById('packs')
+      grid.innerHTML = list.map(p => `
+        <div class="card">
+          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}</h3>
+          <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
+          <div class="meta">
+            <span class="chip">${MB.esc(p.category)}</span>
+            <span class="chip">${MB.esc(p.author)}</span>
+            <span class="chip">${MB.esc(p.license)}</span>
+            ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
+          </div>
+        </div>`).join('')
+      document.getElementById('empty').classList.toggle('hidden', list.length > 0)
+    }
+
+    function renderChips() {
+      const cats = [...new Set(all.map(p => p.category))].sort()
+      const chips = document.getElementById('chips')
+      chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">${MB.t('all')}</span>`]
+        .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">${MB.esc(c)}</span>`))
+        .join('')
+      chips.querySelectorAll('.chip').forEach(el => el.addEventListener('click', () => {
+        activeCategory = el.dataset.cat || null
+        renderChips()
+        render()
+      }))
+    }
+
+    MB.header('browse')
+    MB.api('/api/packs').then(({ packs }) => {
+      all = packs
+      renderChips()
+      render()
+    })
+    document.getElementById('search').addEventListener('input', render)
+  </script>
+</body>
+</html>

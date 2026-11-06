@@ -1,0 +1,11 @@
+# Local runtime state (market service work dir: staging, verifier temp)
+/data/
+
+# Rust build output
+/server-rs/target/
+
+# Node
+node_modules/
+
+# OS noise
+.DS_Store

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main id="main">
+    <p class="muted">Loading…</p>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    const name = new URLSearchParams(location.search).get('name')
+
+    function render({ pack, health }) {
+      if (!pack) {
+        document.getElementById('main').innerHTML = `<h1>${MB.t('packNotFound')}</h1>`
+        return
+      }
+      const desc = MB.esc(MB.localizedDesc(pack.description))
+      document.title = `${pack.name} — docwright pack market`
+      document.getElementById('main').innerHTML = `
+        <h1>${MB.esc(pack.name)} <span class="muted">@${MB.esc(pack.version)}</span></h1>
+        <p>${desc}</p>
+        ${pack.hasFunctionRules ? `<div class="notice bad">${MB.esc(MB.t('functionsWarn'))}</div>` : ''}
+        <section class="block">
+          <table class="kv">
+            <tr><td>${MB.t('version')}</td><td>${MB.esc(pack.version)}</td></tr>
+            <tr><td>${MB.t('author')}</td><td>${MB.esc(pack.author)}</td></tr>
+            <tr><td>${MB.t('category')}</td><td>${MB.esc(pack.category)}</td></tr>
+            <tr><td>${MB.t('license')}</td><td>${MB.esc(pack.license)}</td></tr>
+            <tr><td>${MB.t('consumes')}</td><td>${MB.esc((pack.consumes || []).join(', ')) || '—'}</td></tr>
+            <tr><td>${MB.t('languages')}</td><td>${MB.esc((pack.languages || []).join(', '))}</td></tr>
+            <tr><td>${MB.t('requiresTopic')}</td><td>${pack.requiresTopic ? 'yes' : 'no'}</td></tr>
+            <tr><td>${MB.t('artifactPrefix')}</td><td>${MB.esc(pack.artifactPrefix || '—')}</td></tr>
+            <tr><td>${MB.t('added')}</td><td>${MB.esc(pack.added)}</td></tr>
+            <tr><td>${MB.t('updated')}</td><td>${MB.esc(pack.updated)}</td></tr>
+          </table>
+        </section>
+        <section class="block">
+          <h2>${MB.t('install')}</h2>
+          <code class="cmd">node install.mjs ${MB.esc(pack.name)} --index ${MB.esc(location.origin)}/api/index</code>
+          <p class="muted" style="font-size:0.85rem">
+            Copies the pack into <code>./.docwright/packs/</code> (or pass <code>--into</code>), then restart the
+            dsh host and check with <code>doc_packs</code>.
+            <span lang="zh">拷入 <code>./.docwright/packs/</code>(可用 <code>--into</code> 指定),重启宿主后用
+            <code>doc_packs</code> 确认可见。</span>
+          </p>
+          <p><a href="${MB.esc(pack.tarball)}" download>${MB.t('download')}</a></p>
+        </section>
+        ${health ? `
+        <section class="block">
+          <h2>${MB.t('healthSheet')}</h2>
+          <pre class="sheet">${MB.esc(health)}</pre>
+        </section>` : ''}`
+
+      MB.header('browse')
+    }
+
+    MB.header('browse')
+    if (!name) {
+      location.href = '/'
+    } else {
+      MB.api(`/api/packs/${encodeURIComponent(name)}`)
+        .then(render)
+        .catch(e => {
+          document.getElementById('main').innerHTML = `<p class="notice bad">${MB.esc(e.message)}</p>`
+          MB.header('browse')
+        })
+    }
+  </script>
+</body>
+</html>

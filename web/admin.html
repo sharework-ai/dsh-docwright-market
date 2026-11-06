@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review — docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <h1 data-i18n="queue"></h1>
+    <div id="auth-box" class="card">
+      <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <button id="btn-signin" class="primary" data-i18n="signIn"></button>
+      <p class="muted" style="font-size:0.82rem">Reviewing requires an admin profile (profiles.is_admin). <span lang="zh">审核页需要管理员账号(profiles.is_admin)。</span></p>
+    </div>
+    <div id="queue" class="hidden"></div>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    MB.header('admin')
+
+    document.getElementById('btn-signin').addEventListener('click', async () => {
+      const email = document.getElementById('email').value
+      const password = document.getElementById('password').value
+      const { error } = await MB.supabase.auth.signInWithPassword({ email, password })
+      if (error) alert(error.message)
+      else load()
+    })
+
+    async function load() {
+      const s = await MB.session()
+      if (!s) return
+      document.getElementById('auth-box').classList.add('hidden')
+      document.getElementById('queue').classList.remove('hidden')
+      const { queue } = await MB.api('/api/admin/queue', { auth: true })
+      const el = document.getElementById('queue')
+      if (!queue.length) {
+        el.innerHTML = `<p class="muted" data-i18n="emptyQueue"></p>`
+        MB.applyI18n()
+        return
+      }
+      el.innerHTML = queue.map(item => `
+        <div class="card" style="margin-bottom:1rem">
+          <h3>${MB.esc(item.packName)}@${MB.esc(item.version)} <span class="chip">${MB.esc(item.category || '')}</span>
+            <span class="chip">${MB.esc(item.author || '')}</span> <span class="chip">${MB.esc(item.license || '')}</span></h3>
+          ${item.report.hasFunctionRules ? `<div class="notice bad">${MB.esc(MB.t('functionsWarn'))}</div>` : ''}
+          ${(item.report.problems || []).length ? `<div class="notice bad">${MB.esc(item.report.problems.join('\n'))}</div>` : ''}
+          <details open><summary>manifest</summary>
+            <pre class="sheet">${MB.esc(JSON.stringify(item.report.manifest, null, 2))}</pre></details>
+          <details open><summary>files</summary>
+            <pre class="sheet">${MB.esc((item.report.files || []).join('\n'))}</pre></details>
+          <details open><summary>pack:check</summary>
+            <pre class="sheet">${MB.esc(item.report.checkOutput || '')}</pre></details>
+          <label class="field"><span data-i18n="note"></span><input id="note-${item.id}"></label>
+          <button class="primary" data-id="${item.id}" data-action="approve">${MB.t('approve')}</button>
+          <button class="danger" data-id="${item.id}" data-action="reject">${MB.t('reject')}</button>
+        </div>`).join('')
+      MB.applyI18n()
+      el.querySelectorAll('button[data-id]').forEach(btn => btn.addEventListener('click', async () => {
+        const note = document.getElementById(`note-${btn.dataset.id}`).value
+        await MB.api(`/api/admin/review/${btn.dataset.id}`, {
+          method: 'POST',
+          auth: true,
+          body: { action: btn.dataset.action, note: note || null },
+        })
+        load()
+      }))
+    }
+
+    load().catch(e => {
+      // Non-admin (or signed out): keep the sign-in box visible.
+      console.info(e.message)
+    })
+  </script>
+</body>
+</html>
