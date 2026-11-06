@@ -126,12 +126,12 @@ scripts/e2e.sh           # 集成场景:快乐链(投稿 → 校验 → 审核 �
 - **install.mjs**(7 个 CLI 用例):本地假 market 钉住退出码(0/2/3)、
   落盘文件与全部完整性拒绝(tarball sha256、内容哈希、manifest 名、
   未带 --force 的重装)。
-- **server-rs**(约 47% 行):全部市场规则(队列去重、版本唯一/递增、
-  所有权、内容变更要求)、发布 upsert(首发 + 更新保留 added)、审核状态
-  迁移、读侧 handler(list/detail/index/tarball,含 302/404 与穿越拒绝)、
-  真实路由上的认证拒绝路径(缺失/伪造 token → 401)。semver 排序
-  (含 pre-release)。未覆盖部分是 HTTP 装配与 Storage 往返,由下面的
-  e2e 场景集兜底。
+- **server-rs**(约 80% 行):上述全部,外加 wiremock 全 handler 集成
+  测试(mock Supabase 的 Auth /user 降级与 Storage 上传/下载/ensure,
+  以及 verifier sidecar)——投稿快乐路径、机器拒绝不落库、approve 发布
+  链端到端(mock 下载 → 目录 upsert → 审核打戳 → tarball 重定向)、
+  投稿的属主/陌生人视角、仅管理员队列、拒绝附备注、verifier 之前的
+  表单字段校验。剩余缺口是启动装配(config/main,由 e2e 启动覆盖)。
 
 npm devDependencies(vitest)仅开发期使用——运行时保持零依赖(verifier、
 安装器、web 页面不拉任何包)。

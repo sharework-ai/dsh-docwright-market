@@ -143,14 +143,14 @@ What the unit layer pins down today:
 - **install.mjs** (7 CLI cases): a local fake market pins exit codes
   (0/2/3), landed files, and every integrity rejection (tarball sha256,
   content hash, manifest name, duplicate without --force).
-- **server-rs** (~47% lines): all market rules (queue dedup, version
-  uniqueness/monotonicity, ownership, content-change), the publish upsert
-  (first publish + update preserving `added`), the review transition, the
-  read-side handlers (list/detail/index/tarball incl. the 302-vs-404 and
-  traversal rejection), and auth rejection paths through the real router
-  (401 on missing/bogus tokens). Semver ordering incl. pre-releases.
-  The uncovered rest is HTTP wiring and Storage round-trips — covered by
-  the e2e scenario suite below.
+- **server-rs** (~80% lines): everything above plus full-handler
+  integration tests with wiremock standing in for Supabase (Auth /user
+  fallback, Storage upload/download/ensure) and the verifier sidecar —
+  submit happy path, machine-rejection storing nothing, the approve
+  publish chain end to end (mock download → catalog upsert → review stamp
+  → tarball redirect), owner-vs-stranger submission views, admin-only
+  queue, reject with note, and form-field validation before the verifier.
+  Remaining gaps are startup wiring (config/main, covered by e2e boot).
 
 npm devDependencies (vitest) are dev-only — runtime stays zero-dependency
 (verifier, installer, and web pages pull no packages).

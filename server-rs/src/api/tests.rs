@@ -16,7 +16,7 @@ use serde_json::{json, Value};
 
 // Surface the swallowed sqlx errors behind AppError::internal during tests.
 static INIT: std::sync::Once = std::sync::Once::new();
-fn init_log() {
+pub(crate) fn init_log() {
     INIT.call_once(|| {
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::ERROR)
@@ -28,7 +28,7 @@ fn user(id: Uuid) -> AuthUser {
     AuthUser { id, email: Some("author@example.invalid".into()) }
 }
 
-async fn seed_user(pool: &PgPool, id: Uuid) {
+pub(crate) async fn seed_user(pool: &PgPool, id: Uuid) {
     sqlx::query("insert into auth.users (id, email) values ($1, $2)")
         .bind(id)
         .bind("author@example.invalid")
@@ -37,7 +37,7 @@ async fn seed_user(pool: &PgPool, id: Uuid) {
         .expect("seed auth user");
 }
 
-async fn seed_pack(pool: &PgPool, name: &str, version: &str, author_id: Uuid, hash: &str) {
+pub(crate) async fn seed_pack(pool: &PgPool, name: &str, version: &str, author_id: Uuid, hash: &str) {
     sqlx::query(
         "insert into packs (name, version, description, category, author, author_id, license, \
          content_hash, tarball_path, tarball_sha256) \
@@ -53,7 +53,7 @@ async fn seed_pack(pool: &PgPool, name: &str, version: &str, author_id: Uuid, ha
     .expect("seed pack");
 }
 
-async fn seed_submission(
+pub(crate) async fn seed_submission(
     pool: &PgPool,
     id: Uuid,
     name: &str,
@@ -301,10 +301,10 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 
 fn test_state(pool: PgPool) -> Arc<crate::state::AppState> {
-    test_state_with(pool, "http://supabase.invalid")
+    test_state_with(&pool, "http://supabase.invalid")
 }
 
-fn test_state_with(pool: PgPool, supabase_api_url: &str) -> Arc<crate::state::AppState> {
+fn test_state_with(pool: &PgPool, supabase_api_url: &str) -> Arc<crate::state::AppState> {
     Arc::new(crate::state::AppState {
         cfg: crate::config::Config {
             listen: "127.0.0.1:0".parse().unwrap(),
@@ -319,7 +319,7 @@ fn test_state_with(pool: PgPool, supabase_api_url: &str) -> Arc<crate::state::Ap
             source_url: "https://example.invalid/repo".into(),
         },
         http: reqwest::Client::new(),
-        db: pool,
+        db: pool.clone(),
         jwks: tokio::sync::Mutex::new(None),
     })
 }
@@ -473,7 +473,7 @@ async fn auth_gated_routes_reject_missing_and_bogus_tokens(pool: PgPool) {
     init_log();
     // supabase_api_url points at a dead port: both verification paths
     // (JWKS fetch, GoTrue /user fallback) must fail -> 401, never a 5xx.
-    let app = crate::build_router(test_state_with(pool, "http://127.0.0.1:9"), "");
+    let app = crate::build_router(test_state_with(&pool, "http://127.0.0.1:9"), "");
 
     for path in [
         "/api/submissions/00000000-0000-0000-0000-000000000000",
