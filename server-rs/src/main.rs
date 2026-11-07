@@ -37,7 +37,6 @@ async fn main() {
         .connect(&cfg.database_url)
         .await
         .unwrap_or_else(|e| panic!("DATABASE_URL unusable: {e}"));
-    std::fs::create_dir_all(&cfg.data_dir).expect("DATA_DIR must be creatable");
 
     let state = Arc::new(AppState {
         cfg: cfg.clone(),

@@ -61,8 +61,6 @@ spec:
               value: "8398"
             - name: WEB_DIR
               value: /app/web
-            - name: DATA_DIR
-              value: /tmp/market-data
           ports:
             - containerPort: 8398
           readinessProbe:

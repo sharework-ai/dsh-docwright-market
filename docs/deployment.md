@@ -62,7 +62,7 @@ pack_versions → packs → submissions → profiles → GoTrue admin delete(chi
 | `DATABASE_URL` | `postgres://postgres:…@supabase-postgres.supabase.svc:5432/postgres` |
 | `VERIFIER_URL` | `http://verifier.market.svc:8399` |
 | `LISTEN_HOST` / `PORT` | `0.0.0.0` / `8398`(loopback 默认,宿主直跑时) |
-| `WEB_DIR` / `DATA_DIR` | 静态页 / 暂存目录 |
+| `WEB_DIR` | 静态页目录 |
 
 verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
 `VERIFIER_HOST`(容器内 0.0.0.0)、`VERIFIER_TMP`、`VERIFIER_MAX_BYTES`。

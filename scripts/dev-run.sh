@@ -52,7 +52,6 @@ SUPABASE_PUBLISHABLE_KEY="$PUBLISHABLE_KEY" \
 DATABASE_URL="postgres://postgres:${DB_PASSWORD}@127.0.0.1:${PF_PORT}/postgres" \
 VERIFIER_URL="http://127.0.0.1:8399" \
 WEB_DIR="$M/web" \
-DATA_DIR="$M/data" \
 "$M/server-rs/target/debug/docwright-market" &
 SERVER_PID=$!
 

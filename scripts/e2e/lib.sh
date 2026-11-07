@@ -82,7 +82,7 @@ ensure_services() {
   SUPABASE_PUBLISHABLE_KEY="$(get_secret supabase-jwt publishable-key)" \
   DATABASE_URL="postgres://postgres:${db_password}@127.0.0.1:${PF_PORT}/postgres" \
   VERIFIER_URL="http://127.0.0.1:${VERIFIER_PORT}" \
-  WEB_DIR="$M/web" DATA_DIR="$M/data" \
+  WEB_DIR="$M/web" \
   "$M/server-rs/target/debug/docwright-market" >>"$SERVICES_LOG" 2>&1 & E2E_SERVER_PID=$!
 
   for _ in $(seq 1 60); do

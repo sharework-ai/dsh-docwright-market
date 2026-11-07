@@ -392,7 +392,6 @@ fn test_state_with(pool: &PgPool, supabase_api_url: &str) -> Arc<crate::state::A
             database_url: String::new(),
             verifier_url: "http://127.0.0.1:1".into(),
             web_dir: String::new(),
-            data_dir: String::new(),
             public_origin: "http://127.0.0.1:8398".into(),
             source_url: "https://example.invalid/repo".into(),
         },

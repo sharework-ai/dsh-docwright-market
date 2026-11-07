@@ -24,8 +24,6 @@ pub struct Config {
     pub verifier_url: String,
     /// Directory containing the static web pages.
     pub web_dir: String,
-    /// Local work dir for staging archives during review.
-    pub data_dir: String,
     /// Public origin of this market service (index.json `origin`, page URLs).
     pub public_origin: String,
     /// Source repository URL (index.json `source`).
@@ -68,7 +66,6 @@ impl Config {
                 .trim_end_matches('/')
                 .to_string(),
             web_dir: env_or("WEB_DIR", "web"),
-            data_dir: env_or("DATA_DIR", "data"),
             public_origin: env_or("PUBLIC_ORIGIN", "http://localhost:8398")
                 .trim_end_matches('/')
                 .to_string(),

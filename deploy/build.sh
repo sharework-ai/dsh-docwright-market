@@ -79,6 +79,7 @@ cp -r "$M/verifier" "$CONTEXT/verifier"
 echo "== building localhost/market-server:$TAG =="
 podman build \
   --volume "$HOME/devcache/cargo/registry":/home/app/.cargo/registry \
+  --volume "$HOME/devcache/cargo/target-market":/build/target \
   --build-arg BASE_IMAGE=localhost/rust-dev:1.3 \
   --build-arg RUNTIME_IMAGE=localhost/base:1.1 \
   -t "localhost/market-server:$TAG" -f "$M/deploy/server.Dockerfile" "$CONTEXT"

@@ -126,7 +126,6 @@ fn state_for(pool: &PgPool, supabase: &MockServer, verifier: &MockServer) -> Arc
             database_url: String::new(),
             verifier_url: verifier.uri(),
             web_dir: String::new(),
-            data_dir: String::new(),
             public_origin: "http://127.0.0.1:8398".into(),
             source_url: "https://example.invalid/repo".into(),
         },
