@@ -1,21 +1,25 @@
 # dsh-docwright-market
 
 A submission-based marketplace for [docwright](https://github.com/sharework-ai/dsh-docwright)
-packs: authors upload a `.tgz` from the browser, machine verification runs
-docwright's own `pack:check` (golden-green or nothing enters the queue), a human
-approves, and consumers install into their `packsDir` with a zero-dependency
-script. No git/GitHub knowledge required to submit; no accounts beyond an email
-signup.
+packs: authors set a publisher org, upload a `.tgz` from the browser, machine
+verification runs docwright's own `pack:check` (golden-green or nothing enters
+the queue), a human approves (which appends the version history), and consumers
+install the latest — or any pinned historical version — into their `packsDir`
+with a zero-dependency script. Authors manage their own packs (metadata edits,
+disable/enable, hard delete, submission withdraw) from the account page. No
+git/GitHub knowledge required to submit; no accounts beyond an email signup.
 
 中文文档:[README.zh.md](README.zh.md);设计与方案文档见 [docs/](docs/)(中文)。
 
 ## Quick start
 
 ```sh
-# install a pack (consumer)
+# install a pack (consumer): latest, or pin an exact historical version
 node install.mjs task-card                # into ./.docwright/packs/, then restart the dsh host
+node install.mjs task-card@0.1.0          # pinned
 
-# submit a pack (author)
+# publish a pack (author): set your org once, then upload
+open https://dm.shrwk.com/account.html    # password, org, your packs, your submissions
 open https://dm.shrwk.com/submit.html     # upload a .tgz, watch the live report
 
 # review submissions (admin)
@@ -64,6 +68,5 @@ npm devDependencies (vitest) are dev-only — runtime stays zero-dependency.
 
 Public hardening beyond the current frpc route, a submit CLI over the same
 API, zip uploads, RLS-backed direct reads, static API scans for
-`functions.js`, long-term tarball versioning. Pack authoring lives in
-docwright itself — domain-neutral chain packs belong in the docwright repo,
-not the market.
+`functions.js`. Pack authoring lives in docwright itself — domain-neutral
+chain packs belong in the docwright repo, not the market.

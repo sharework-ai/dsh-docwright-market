@@ -13,7 +13,7 @@ mod storage;
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde_json::json;
 use tower_http::services::ServeDir;
@@ -37,7 +37,6 @@ async fn main() {
         .connect(&cfg.database_url)
         .await
         .unwrap_or_else(|e| panic!("DATABASE_URL unusable: {e}"));
-    std::fs::create_dir_all(&cfg.data_dir).expect("DATA_DIR must be creatable");
 
     let state = Arc::new(AppState {
         cfg: cfg.clone(),
@@ -74,6 +73,14 @@ async fn frontend_config(State(state): State<Arc<AppState>>) -> Json<serde_json:
 pub(crate) fn build_router(state: Arc<AppState>, web_dir: &str) -> Router {
     Router::new()
         .route("/config.json", get(frontend_config))
+        .route("/api/account", get(api::account::show))
+        .route("/api/account/org", put(api::account::set_org))
+        .route("/api/my/packs", get(api::owner::my_packs))
+        .route("/api/my/packs/{name}", get(api::owner::my_packs_one).patch(api::owner::patch_pack).delete(api::owner::delete_pack))
+        .route("/api/my/packs/{name}/disable", post(api::owner::disable_pack))
+        .route("/api/my/packs/{name}/enable", post(api::owner::enable_pack))
+        .route("/api/my/submissions", get(api::owner::my_submissions))
+        .route("/api/my/submissions/{id}", delete(api::owner::withdraw_submission))
         .route("/api/submissions", post(api::submissions::submit))
         .route("/api/submissions/{id}", get(api::submissions::get_submission))
         .route("/api/packs", get(api::packs::list))

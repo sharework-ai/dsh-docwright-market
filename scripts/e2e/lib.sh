@@ -27,8 +27,21 @@ SCENARIOS=()      # ordered list of scenario names
 SCENARIO_FN=()    # parallel array: function names
 CURRENT_SCENARIO=""
 FAILED=()
+CREATED_USERS_FILE="$T/created-users.txt"   # shared across scenario subshells
+touch "$CREATED_USERS_FILE"
 
 get_secret() { kubectl -n "$NS" get secret "$1" -o "jsonpath={.data.$2}" | base64 -d; }
+
+# Direct SQL against the supabase Postgres (tuples-only output), so helpers
+# can both mutate and SELECT without parsing apply-migration's preamble.
+db_sql() {
+  local dbpod
+  dbpod="$(kubectl -n "$NS" get pods --no-headers -o custom-columns=':metadata.name' \
+    | grep -E 'single.*db|postgres' | head -1)"
+  kubectl -n "$NS" exec -i "$dbpod" -- psql -U postgres -d postgres -Atq <<SQL
+$1
+SQL
+}
 
 # --- service lifecycle ---------------------------------------------------------
 # Cluster mode (default): verify the deployed market answers; nothing to start.
@@ -64,11 +77,12 @@ ensure_services() {
   VERIFIER_PORT="$VERIFIER_PORT" DOCWRIGHT_ROOT="$DW" node "$M/verifier/index.mjs" >>"$SERVICES_LOG" 2>&1 & E2E_VERIFIER_PID=$!
   PORT="$MARKET_PORT" \
   SUPABASE_API_URL="http://supabase.lan" \
+  PUBLIC_SUPABASE_URL="http://supabase.lan" \
   SUPABASE_SECRET_KEY="$secret_key" \
   SUPABASE_PUBLISHABLE_KEY="$(get_secret supabase-jwt publishable-key)" \
   DATABASE_URL="postgres://postgres:${db_password}@127.0.0.1:${PF_PORT}/postgres" \
   VERIFIER_URL="http://127.0.0.1:${VERIFIER_PORT}" \
-  WEB_DIR="$M/web" DATA_DIR="$M/data" \
+  WEB_DIR="$M/web" \
   "$M/server-rs/target/debug/docwright-market" >>"$SERVICES_LOG" 2>&1 & E2E_SERVER_PID=$!
 
   for _ in $(seq 1 60); do
@@ -95,7 +109,7 @@ load_admin_tools() {
 }
 
 # Creates a confirmed GoTrue account and logs it in; sets LAST_TOKEN (Bearer
-# header array in AUTH_LAST) and LAST_USER_ID.
+# header array in AUTH_LAST) and LAST_USER_ID. Registers the id for teardown.
 create_account() {
   local email="e2e-$1-$(date +%s)$RANDOM@example.invalid"
   local user_json token_json
@@ -103,6 +117,7 @@ create_account() {
     -d "{\"email\":\"$email\",\"password\":\"e2e-password-1\",\"email_confirm\":true}")" \
     || { sc_fail "cannot create GoTrue account $email"; return 1; }
   LAST_USER_ID="$(echo "$user_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+  echo "$LAST_USER_ID" >>"$CREATED_USERS_FILE"
   token_json="$(curl -sf -m 10 -H "apikey: $(get_secret supabase-jwt service-key)" \
     -H 'Content-Type: application/json' \
     -X POST "http://supabase.lan/auth/v1/token?grant_type=password" \
@@ -112,18 +127,85 @@ create_account() {
   AUTH_LAST=( -H "Authorization: Bearer $LAST_TOKEN" )
 }
 
-seed_admin_profile() {
-  local user_id="$1"
-  ~/projects/commons/supabase/setup.sh apply-migration /dev/stdin >/dev/null 2>&1 <<SQL || { sc_fail "cannot seed admin profile"; return 1; }
-insert into profiles (id, is_admin, display_name) values ('$user_id', true, 'e2e-admin')
-on conflict (id) do update set is_admin = true;
-SQL
+# PUT the publisher org for the account that last logged in (AUTH_LAST).
+set_org() {
+  local org="$1" code
+  code="$(http_code "$MARKET/api/account/org" "${AUTH_LAST[@]}" \
+    -H 'Content-Type: application/json' -X PUT -d "{\"org\":\"$org\"}")"
+  assert_eq "$code" "200" "set_org $org must succeed" || return 1
 }
 
+seed_admin_profile() {
+  local user_id="$1"
+  db_sql "insert into profiles (id, is_admin, display_name) values ('$user_id', true, 'e2e-admin')
+          on conflict (id) do update set is_admin = true;" >/dev/null \
+    || { sc_fail "cannot seed admin profile"; return 1; }
+}
+
+# Residue-scoped catalog reset. NEVER truncate: the live catalog belongs to
+# real accounts now — this only clears rows owned by throwaway e2e accounts.
 reset_catalog() {
-  ~/projects/commons/supabase/setup.sh apply-migration /dev/stdin >/dev/null 2>&1 <<SQL || { echo "cannot reset catalog" >&2; return 1; }
-truncate table submissions, packs;
-SQL
+  db_sql "
+    delete from pack_versions where name in (
+      select name from packs where author_id in (
+        select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid'));
+    delete from packs where author_id in (
+      select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid');
+    delete from submissions where uploader in (
+      select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid');
+  " >/dev/null || { echo "cannot reset catalog" >&2; return 1; }
+  # Best-effort storage cleanup for the same rows (orphans are unreachable,
+  # but don't let them pile up).
+  local path
+  while IFS='|' read -r bucket object; do
+    [ -n "$object" ] || continue
+    storage_delete "$bucket" "$object" || true
+  done < <(db_sql "
+    select 'tarballs', replace(tarball_path, 'tarballs/', '') from pack_versions where name in (
+      select name from packs where author_id in (
+        select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid'));
+  " 2>/dev/null; db_sql "
+    select 'uploads', archive_path from submissions where uploader in (
+      select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid')
+      and archive_path is not null;
+  " 2>/dev/null)
+}
+
+# Storage REST delete with the service key (Storage rejects the sb_secret_ key).
+storage_delete() {
+  local bucket="$1" object="$2"
+  curl -sf -m 10 -X DELETE "http://supabase.lan/storage/v1/object/$bucket/$object" \
+    -H "Authorization: Bearer $(get_secret supabase-jwt service-key)" >/dev/null
+}
+
+# Removes every account this run created, with their packs/submissions and
+# Storage objects — children before auth.users (packs.author_id and
+# submissions.uploader have no ON DELETE CASCADE). Registered in run.sh's
+# EXIT trap so runs leave no residue behind.
+teardown_accounts() {
+  local uid
+  while IFS= read -r uid; do
+    [ -n "$uid" ] || continue
+    # Storage objects owned by this account (pack tarballs + upload archives).
+    while IFS='|' read -r bucket object; do
+      [ -n "$object" ] || continue
+      storage_delete "$bucket" "$object" || true
+    done < <(db_sql "
+      select 'tarballs', replace(v.tarball_path, 'tarballs/', '') from pack_versions v
+        join packs p on p.name = v.name where p.author_id = '$uid';
+      select 'uploads', s.archive_path from submissions s
+        where s.uploader = '$uid' and s.archive_path is not null;
+    " 2>/dev/null)
+    db_sql "
+      delete from pack_versions where name in (select name from packs where author_id = '$uid');
+      delete from packs where author_id = '$uid';
+      delete from submissions where uploader = '$uid';
+      delete from profiles where id = '$uid';
+    " >/dev/null 2>&1 || true
+    curl -sf -m 10 "${ADMIN_AUTH[@]}" -X DELETE \
+      "http://supabase.lan/auth/v1/admin/users/$uid" >/dev/null 2>&1 || true
+  done <"$CREATED_USERS_FILE"
+  : >"$CREATED_USERS_FILE"
 }
 
 # --- scenario framework --------------------------------------------------------
@@ -164,15 +246,18 @@ run_scenario() {
 
 http_code() { curl -s -m 90 -o /dev/null -w '%{http_code}' "$@"; }
 
-# Submits samples/task-card.tgz (or another archive) with the given token;
-# sets LAST_SUB_ID. Requires the verifier to be green on it.
+# Submits the given archive with the given token; sets LAST_SUB_ID. Requires
+# the verifier to be green on it.
 submit_archive() {
   local token="$1" archive="$2"
-  local json
-  json="$(curl -sf -m 120 "$MARKET/api/submissions" -H "Authorization: Bearer $token" \
+  local raw code json
+  raw="$(curl -s -m 120 -w '\n%{http_code}' "$MARKET/api/submissions" -H "Authorization: Bearer $token" \
     -F "archive=@${archive:-$M/samples/task-card.tgz}" \
     -F "author=sharework-ai" -F "category=dev" -F "license=MIT")" \
-    || { sc_fail "submit call failed"; return 1; }
+    || { sc_fail "submit call failed (transport)"; return 1; }
+  code="$(echo "$raw" | tail -1)"
+  json="$(echo "$raw" | sed '$d')"
+  [ "$code" = "200" ] || { sc_fail "submit call failed -> $code: $(echo "$json" | head -c 200)"; return 1; }
   local ok sub_id
   ok="$(echo "$json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("ok"))')"
   [ "$ok" = "True" ] || { sc_fail "verification rejected the archive: $(echo "$json" | head -c 300)"; return 1; }
@@ -188,17 +273,36 @@ publish_sample_pack() {
     || { sc_fail "approve failed"; return 1; }
 }
 
+# Builds a byte-real pack fixture from the task-card sample with a rewritten
+# manifest name + version. Scenarios publish these renamed fixtures — never
+# the real task-card, which belongs to a live account once the market has
+# real users (ownership + version-uniqueness rules would reject it).
+sample_archive_as() {
+  local name="$1" version="$2" out="$3"
+  local dir
+  dir="$(mktemp -d "$T/fx-$name-$version-XXXXXX")"
+  tar xzf "$M/samples/task-card.tgz" -C "$dir"
+  [ "$name" = "task-card" ] || mv "$dir/task-card" "$dir/$name"
+  python3 - "$dir/$name/manifest.json" "$name" "$version" <<'PY'
+import json, sys
+p, n, v = sys.argv[1], sys.argv[2], sys.argv[3]
+m = json.load(open(p)); m["name"] = n; m["version"] = v; json.dump(m, open(p, "w"))
+PY
+  tar czf "$out" -C "$dir" "$name"
+}
+
 # Bumps the sample archive to the given version (verifier still greens on it:
 # no rule inspects the version field).
 sample_archive_at_version() {
   local version="$1" out="$2"
-  local dir="$T/vpack-$version-$$"
-  mkdir -p "$dir"
-  tar xzf "$M/samples/task-card.tgz" -C "$dir"
-  python3 - "$dir/task-card/manifest.json" "$version" <<'PY'
-import json, sys
-p, v = sys.argv[1], sys.argv[2]
-m = json.load(open(p)); m["version"] = v; json.dump(m, open(p, "w"))
-PY
-  tar czf "$out" -C "$dir" task-card
+  sample_archive_as "task-card" "$version" "$out"
+}
+
+# Submits + approves the given fixture archive; sets LAST_SUB_ID.
+publish_fixture() {
+  local token="$1" archive="$2"
+  submit_archive "$token" "$archive" || return 1
+  curl -sf -m 30 "$MARKET/api/admin/review/$LAST_SUB_ID" -H "Authorization: Bearer $token" \
+    -H 'Content-Type: application/json' -d '{"action":"approve","note":"e2e"}' >/dev/null \
+    || { sc_fail "approve failed"; return 1; }
 }

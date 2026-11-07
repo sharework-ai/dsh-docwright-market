@@ -15,21 +15,29 @@
   <script>
     const name = new URLSearchParams(location.search).get('name')
 
-    function render({ pack, health }) {
+    function render({ pack, versions, health }) {
       if (!pack) {
         document.getElementById('main').innerHTML = `<h1>${MB.t('packNotFound')}</h1>`
         return
       }
       const desc = MB.esc(MB.localizedDesc(pack.description))
       document.title = `${pack.name} — docwright pack market`
+      const versionRows = (versions || []).map(v => `
+        <tr>
+          <td>${MB.esc(v.version)}</td>
+          <td>${MB.esc(v.publishedAt)}</td>
+          <td><a href="${MB.esc(v.tarball)}" download>${MB.t('download')}</a></td>
+        </tr>`).join('')
       document.getElementById('main').innerHTML = `
-        <h1>${MB.esc(pack.name)} <span class="muted">@${MB.esc(pack.version)}</span></h1>
+        <h1>${MB.esc(pack.name)} <span class="muted">@${MB.esc(pack.version)}</span>
+          ${pack.org ? `<span class="chip">org: ${MB.esc(pack.org)}</span>` : ''}</h1>
         <p>${desc}</p>
         ${pack.hasFunctionRules ? `<div class="notice bad">${MB.esc(MB.t('functionsWarn'))}</div>` : ''}
         <section class="block">
           <table class="kv">
             <tr><td>${MB.t('version')}</td><td>${MB.esc(pack.version)}</td></tr>
             <tr><td>${MB.t('author')}</td><td>${MB.esc(pack.author)}</td></tr>
+            <tr><td>org</td><td>${MB.esc(pack.org || '—')}</td></tr>
             <tr><td>${MB.t('category')}</td><td>${MB.esc(pack.category)}</td></tr>
             <tr><td>${MB.t('license')}</td><td>${MB.esc(pack.license)}</td></tr>
             <tr><td>${MB.t('consumes')}</td><td>${MB.esc((pack.consumes || []).join(', ')) || '—'}</td></tr>
@@ -40,14 +48,20 @@
             <tr><td>${MB.t('updated')}</td><td>${MB.esc(pack.updated)}</td></tr>
           </table>
         </section>
+        ${versionRows ? `
+        <section class="block">
+          <h2>${MB.t('versionsLabel')}</h2>
+          <table class="kv">${versionRows}</table>
+        </section>` : ''}
         <section class="block">
           <h2>${MB.t('install')}</h2>
           <code class="cmd">node install.mjs ${MB.esc(pack.name)} --index ${MB.esc(location.origin)}/api/index</code>
           <p class="muted" style="font-size:0.85rem">
             Copies the pack into <code>./.docwright/packs/</code> (or pass <code>--into</code>), then restart the
-            dsh host and check with <code>doc_packs</code>.
+            dsh host and check with <code>doc_packs</code>. Pin a version with
+            <code>node install.mjs ${MB.esc(pack.name)}@0.1.0</code>.
             <span lang="zh">拷入 <code>./.docwright/packs/</code>(可用 <code>--into</code> 指定),重启宿主后用
-            <code>doc_packs</code> 确认可见。</span>
+            <code>doc_packs</code> 确认可见;<code>name@版本号</code> 可安装指定历史版本。</span>
           </p>
           <p><a href="${MB.esc(pack.tarball)}" download>${MB.t('download')}</a></p>
         </section>

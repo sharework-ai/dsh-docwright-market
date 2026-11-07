@@ -24,8 +24,6 @@ pub struct Config {
     pub verifier_url: String,
     /// Directory containing the static web pages.
     pub web_dir: String,
-    /// Local work dir for staging archives during review.
-    pub data_dir: String,
     /// Public origin of this market service (index.json `origin`, page URLs).
     pub public_origin: String,
     /// Source repository URL (index.json `source`).
@@ -68,7 +66,6 @@ impl Config {
                 .trim_end_matches('/')
                 .to_string(),
             web_dir: env_or("WEB_DIR", "web"),
-            data_dir: env_or("DATA_DIR", "data"),
             public_origin: env_or("PUBLIC_ORIGIN", "http://localhost:8398")
                 .trim_end_matches('/')
                 .to_string(),
@@ -82,5 +79,20 @@ impl Config {
 
 pub const CATEGORY_WHITELIST: [&str; 6] = ["estimation", "dev", "pm", "test", "docs", "other"];
 pub const LICENSE_WHITELIST: [&str; 5] = ["MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC"];
+/// Publisher orgs that are refused as a slug (product/project identity, not a
+/// tunable — deliberately a code constant, not an env var).
+pub const ORG_RESERVED: [&str; 7] = ["admin", "api", "cosmic", "docwright", "dsh", "market", "www"];
 /// Same cap as the verifier's VERIFIER_MAX_BYTES default.
 pub const MAX_ARCHIVE_BYTES: usize = 50 * 1024 * 1024;
+
+/// A valid org slug: lowercase kebab-case, ≤ 39 chars (npm-scope style).
+pub fn valid_org_slug(org: &str) -> bool {
+    if org.is_empty() || org.len() > 39 || ORG_RESERVED.contains(&org) {
+        return false;
+    }
+    let head_ok = org.as_bytes()[0].is_ascii_lowercase() || org.as_bytes()[0].is_ascii_digit();
+    let body_ok = org
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    head_ok && body_ok
+}

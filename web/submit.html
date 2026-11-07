@@ -23,6 +23,9 @@
     </div>
 
     <div id="form-box" class="hidden">
+      <div id="org-gate" class="notice info hidden">
+        <span data-i18n="orgGate"></span> <a href="/account.html" data-i18n="account"></a>
+      </div>
       <form id="submit-form">
         <label class="field"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
         <label class="field"><span data-i18n="author"></span><input id="author" required></label>
@@ -60,6 +63,17 @@
       const s = await MB.session()
       document.getElementById('auth-box').classList.toggle('hidden', !!s)
       document.getElementById('form-box').classList.toggle('hidden', !s)
+      if (!s) return
+      // Submitting requires a publisher org; without one the server would
+      // 403 anyway, so gate the form up front (and prefill the author from
+      // the org while we're here).
+      const account = await MB.api('/api/account', { auth: true }).catch(() => null)
+      const gated = !account?.org
+      document.getElementById('org-gate').classList.toggle('hidden', !gated)
+      document.getElementById('submit-form').classList.toggle('hidden', gated)
+      if (account?.org && !document.getElementById('author').value) {
+        document.getElementById('author').value = account.org
+      }
     }
 
     // Empty credentials reach GoTrue as an anonymous signup and die with

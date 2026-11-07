@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Account — docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <h1 data-i18n="accountTitle"></h1>
+    <p class="muted" data-i18n="accountHint"></p>
+
+    <div id="auth-box" class="card">
+      <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <div id="auth-error"></div>
+      <button id="btn-signin" class="primary" data-i18n="signIn"></button>
+      <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
+    </div>
+
+    <div id="content" class="hidden">
+      <section class="block card">
+        <h3 data-i18n="passwordTitle"></h3>
+        <label class="field"><span data-i18n="currentPassword"></span><input id="cur-password" type="password" autocomplete="current-password" minlength="6"></label>
+        <label class="field"><span data-i18n="newPassword"></span><input id="new-password" type="password" autocomplete="new-password" minlength="6"></label>
+        <div id="pw-msg"></div>
+        <button id="btn-password" class="primary" data-i18n="changePassword"></button>
+      </section>
+
+      <section class="block card">
+        <h3 data-i18n="orgTitle"></h3>
+        <p class="muted" style="font-size:0.85rem" data-i18n="orgHint"></p>
+        <p id="org-current"><span class="muted" data-i18n="orgNone"></span></p>
+        <label class="field"><span data-i18n="orgNew"></span><input id="org-input" placeholder="sharework-ai" pattern="[a-z0-9][a-z0-9-]{0,38}"></label>
+        <div id="org-msg"></div>
+        <button id="btn-org" class="primary" data-i18n="orgSet"></button>
+      </section>
+
+      <section class="block">
+        <h3 data-i18n="myPacks"></h3>
+        <p id="my-packs-empty" class="muted hidden" data-i18n="noPacksYet"></p>
+        <div id="my-packs"></div>
+      </section>
+
+      <section class="block">
+        <h3 data-i18n="mySubmissions"></h3>
+        <p id="my-subs-empty" class="muted hidden" data-i18n="noSubmissions"></p>
+        <div id="my-subs"></div>
+      </section>
+    </div>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    MB.header('account')
+
+    const CATEGORY_WHITELIST = ['estimation', 'dev', 'pm', 'test', 'docs', 'other']
+    const LICENSE_WHITELIST = ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC']
+
+    function chip(text) { return `<span class="chip">${MB.esc(text)}</span>` }
+    function statusChip(status) {
+      return `<span class="chip ${status === 'disabled' ? 'badge code' : ''}">${MB.esc(status)}</span>`
+    }
+
+    // ---- auth gate (same pattern as submit.html) ------------------------------
+    function readCreds() {
+      const email = document.getElementById('email').value.trim()
+      const password = document.getElementById('password').value
+      const box = document.getElementById('auth-error')
+      if (!email || !password) {
+        box.innerHTML = '<div class="notice bad">请先填写邮箱和密码 / fill in email and password first</div>'
+        return null
+      }
+      box.innerHTML = ''
+      return { email, password }
+    }
+
+    document.getElementById('btn-signin').addEventListener('click', async () => {
+      const creds = readCreds()
+      if (!creds) return
+      const { error } = await MB.supabase.auth.signInWithPassword(creds)
+      if (error) alert(error.message)
+      else location.reload()
+    })
+
+    document.getElementById('btn-signup').addEventListener('click', async () => {
+      const creds = readCreds()
+      if (!creds) return
+      if (creds.password.length < 6) {
+        document.getElementById('auth-error').innerHTML =
+          '<div class="notice bad">密码至少 6 位 / password needs at least 6 characters</div>'
+        return
+      }
+      const { error } = await MB.supabase.auth.signUp(creds)
+      if (error) alert(error.message)
+      else location.reload()
+    })
+
+    // ---- password card ---------------------------------------------------------
+    document.getElementById('btn-password').addEventListener('click', async () => {
+      const msg = document.getElementById('pw-msg')
+      const email = (await MB.session())?.user?.email
+      const current = document.getElementById('cur-password').value
+      const next = document.getElementById('new-password').value
+      if (!email || !current || next.length < 6) {
+        msg.innerHTML = '<div class="notice bad">填写当前密码,新密码至少 6 位 / current password + new (min 6) required</div>'
+        return
+      }
+      try {
+        // Verify the current password by signing in with it — GoTrue answers
+        // invalid-credentials on a mismatch; this also refreshes the session.
+        const { error } = await MB.supabase.auth.signInWithPassword({ email, password: current })
+        if (error) throw new Error(MB.t('currentPassword') + ': ' + error.message)
+        const { error: updateError } = await MB.supabase.auth.updateUser({ password: next })
+        if (updateError) throw updateError
+        msg.innerHTML = `<div class="notice ok">${MB.t('passwordChanged')}</div>`
+        setTimeout(async () => {
+          await MB.supabase.auth.signOut()
+          location.reload()
+        }, 1500)
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      }
+    })
+
+    // ---- org card ---------------------------------------------------------------
+    async function loadOrg() {
+      const acc = await MB.api('/api/account', { auth: true })
+      document.getElementById('org-current').innerHTML = acc.org
+        ? `<strong>${MB.esc(acc.org)}</strong> <span class="muted">(${MB.esc(acc.email ?? '')})</span>`
+        : `<span class="notice info" style="display:inline-block">${MB.t('orgNone')}</span>`
+      if (acc.org) document.getElementById('org-input').placeholder = acc.org
+    }
+
+    document.getElementById('btn-org').addEventListener('click', async () => {
+      const msg = document.getElementById('org-msg')
+      const org = document.getElementById('org-input').value.trim()
+      if (!/^[a-z0-9][a-z0-9-]{0,38}$/.test(org)) {
+        msg.innerHTML = `<div class="notice bad">${MB.t('orgInvalid')}</div>`
+        return
+      }
+      // Changing the org relabels every owned pack — make the cascade visible
+      // before it happens.
+      let packCount = 0
+      try {
+        const mine = await MB.api('/api/my/packs', { auth: true })
+        packCount = mine.packs.length
+      } catch { /* the PUT still works; the preview is best-effort */ }
+      const verb = packCount > 0 ? `${packCount}` : '0'
+      if (!confirm(`${MB.t('orgTitle')}: ${org}\n${MB.t('orgConfirm')(verb)}`)) return
+      try {
+        const res = await MB.api('/api/account/org', { method: 'PUT', body: { org }, auth: true })
+        msg.innerHTML = `<div class="notice ok">${MB.t('orgChanged')(res.packsAffected)}</div>`
+        await loadOrg()
+        await loadMyPacks()
+      } catch (e) {
+        const text = /already taken/.test(e.message) ? MB.t('orgTaken') : e.message
+        msg.innerHTML = `<div class="notice bad">${MB.esc(text)}</div>`
+      }
+    })
+
+    // ---- my packs ---------------------------------------------------------------
+    async function loadMyPacks() {
+      const { packs } = await MB.api('/api/my/packs', { auth: true })
+      const box = document.getElementById('my-packs')
+      document.getElementById('my-packs-empty').classList.toggle('hidden', packs.length > 0)
+      box.innerHTML = packs.map(p => `
+        <div class="card" style="margin-bottom:0.8rem" data-pack="${MB.esc(p.name)}">
+          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
+            ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
+          </h3>
+          <div class="meta">${chip(p.category)}${chip(p.author)}${chip(p.license)}${p.org ? chip('org: ' + p.org) : ''}</div>
+          <div class="meta">
+            <button class="secondary" data-act="edit">${MB.t('edit')}</button>
+            <button class="secondary" data-act="${p.status === 'disabled' ? 'enable' : 'disable'}">
+              ${MB.t(p.status === 'disabled' ? 'enable' : 'disable')}
+            </button>
+            <button class="danger" data-act="delete">${MB.t('delete')}</button>
+          </div>
+          <div class="edit-area"></div>
+        </div>`).join('')
+
+      box.querySelectorAll('[data-pack]').forEach(card => {
+        const name = card.dataset.pack
+        card.querySelectorAll('button[data-act]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const act = btn.dataset.act
+            if (act === 'edit') return renderEditForm(card, name, packs.find(p => p.name === name))
+            if (act === 'disable' || act === 'enable') {
+              await MB.api(`/api/my/packs/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
+              await loadMyPacks()
+              return
+            }
+            if (act === 'delete') {
+              const typed = prompt(`${MB.t('deleteConfirmPrefix')} "${name}"\n${MB.t('deleteReservedNote')}`)
+              if (typed !== name) return
+              await MB.api(`/api/my/packs/${encodeURIComponent(name)}`, { method: 'DELETE', auth: true })
+              await loadMyPacks()
+            }
+          })
+        })
+      })
+    }
+
+    function renderEditForm(card, name, p) {
+      const area = card.querySelector('.edit-area')
+      if (area.innerHTML) { area.innerHTML = ''; return }
+      const opt = (list, selected) => list.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('')
+      area.innerHTML = `
+        <div class="card" style="background:var(--bg); margin-top:0.6rem">
+          <strong style="font-size:0.85rem">${MB.t('editMeta')}</strong>
+          <label class="field"><span>${MB.t('category')}</span><select class="e-category">${opt(CATEGORY_WHITELIST, p.category)}</select></label>
+          <label class="field"><span>${MB.t('license')}</span><select class="e-license">${opt(LICENSE_WHITELIST, p.license)}</select></label>
+          <label class="field"><span>${MB.t('author')}</span><input class="e-author" value="${MB.esc(p.author)}"></label>
+          <label class="field"><span>${MB.t('homepage')}</span><input class="e-homepage" type="url" placeholder="https://…" value="${MB.esc(p.homepage ?? '')}"></label>
+          <div class="e-msg"></div>
+          <button class="primary e-save">${MB.t('save')}</button>
+          <button class="secondary e-cancel">${MB.t('cancel')}</button>
+        </div>`
+      area.querySelector('.e-cancel').addEventListener('click', () => { area.innerHTML = '' })
+      area.querySelector('.e-save').addEventListener('click', async () => {
+        const msg = area.querySelector('.e-msg')
+        const homepage = area.querySelector('.e-homepage').value.trim()
+        const body = {
+          category: area.querySelector('.e-category').value,
+          license: area.querySelector('.e-license').value,
+          author: area.querySelector('.e-author').value,
+          homepage: homepage === '' ? null : homepage,
+        }
+        try {
+          await MB.api(`/api/my/packs/${encodeURIComponent(name)}`, { method: 'PATCH', body, auth: true })
+          await loadMyPacks()
+        } catch (e) {
+          msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+        }
+      })
+    }
+
+    // ---- my submissions ----------------------------------------------------------
+    async function loadMySubmissions() {
+      const { submissions } = await MB.api('/api/my/submissions', { auth: true })
+      const box = document.getElementById('my-subs')
+      document.getElementById('my-subs-empty').classList.toggle('hidden', submissions.length > 0)
+      box.innerHTML = submissions.map(s => `
+        <div class="card" style="margin-bottom:0.6rem">
+          <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
+          ${statusChip(s.status)}
+          <span class="muted" style="font-size:0.8rem">${MB.esc(s.createdAt)}</span>
+          ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
+          ${s.status === 'pending'
+            ? `<div class="meta"><button class="danger" data-withdraw="${s.id}">${MB.t('withdraw')}</button></div>`
+            : ''}
+        </div>`).join('')
+      box.querySelectorAll('button[data-withdraw]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await MB.api(`/api/my/submissions/${btn.dataset.withdraw}`, { method: 'DELETE', auth: true })
+            await loadMySubmissions()
+          } catch (e) {
+            alert(e.message)
+          }
+        })
+      })
+    }
+
+    async function maybeShowContent() {
+      const s = await MB.session()
+      document.getElementById('auth-box').classList.toggle('hidden', !!s)
+      document.getElementById('content').classList.toggle('hidden', !s)
+      if (!s) return
+      await loadOrg().catch(() => {})
+      await loadMyPacks().catch(() => {})
+      await loadMySubmissions().catch(() => {})
+    }
+
+    maybeShowContent()
+  </script>
+</body>
+</html>

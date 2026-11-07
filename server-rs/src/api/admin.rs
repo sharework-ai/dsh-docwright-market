@@ -149,6 +149,18 @@ async fn publish(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
+    // The publisher org comes from the uploader's current profile. The submit
+    // gate makes a missing org unreachable through the UI; this defends the
+    // admin API and any historical queue entries.
+    let org: Option<(Option<String>,)> =
+        sqlx::query_as("select org from profiles where id = $1")
+            .bind(sub.uploader)
+            .fetch_optional(&state.db)
+            .await?;
+    let org = org
+        .and_then(|(o,)| o)
+        .ok_or_else(|| AppError::conflict("uploader has no publisher org — cannot publish"))?;
+
     upsert_published_pack(
         &state.db,
         sub,
@@ -157,6 +169,7 @@ async fn publish(
         has_function_rules,
         &record_path,
         &sha,
+        &org,
     )
     .await?;
     mark_reviewed(&state.db, sub.id, "approved", note, admin.id).await?;
@@ -164,8 +177,10 @@ async fn publish(
 }
 
 /// Catalog write: insert the first publish or overwrite in place (updates
-/// keep `added`, bump `updated`). Split from `publish` so tests can drive it
-/// against a scratch database without Storage.
+/// keep `added`, bump `updated`, keep `status` — a disabled pack stays
+/// disabled until its owner re-enables), and append the version history row.
+/// Split from `publish` so tests can drive it against a scratch database
+/// without Storage.
 pub(crate) async fn upsert_published_pack(
     db: &sqlx::PgPool,
     sub: &SubmissionRow,
@@ -174,12 +189,14 @@ pub(crate) async fn upsert_published_pack(
     has_function_rules: bool,
     tarball_path: &str,
     tarball_sha256: &str,
+    org: &str,
 ) -> Result<(), AppError> {
+    let mut tx = db.begin().await?;
     sqlx::query(
         "insert into packs (name, version, description, category, author, author_id, license, \
          homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
-         content_hash, tarball_path, tarball_sha256) \
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) \
+         content_hash, tarball_path, tarball_sha256, org) \
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
          on conflict (name) do update set \
            version = excluded.version, \
            description = excluded.description, \
@@ -196,6 +213,7 @@ pub(crate) async fn upsert_published_pack(
            content_hash = excluded.content_hash, \
            tarball_path = excluded.tarball_path, \
            tarball_sha256 = excluded.tarball_sha256, \
+           org = excluded.org, \
            updated = now()",
     )
     .bind(&sub.pack_name)
@@ -214,8 +232,33 @@ pub(crate) async fn upsert_published_pack(
     .bind(content_hash)
     .bind(tarball_path)
     .bind(tarball_sha256)
-    .execute(db)
+    .bind(org)
+    .execute(&mut *tx)
     .await?;
+    // History row for this exact version. `on conflict do nothing` keeps an
+    // idempotent re-approve from duplicating.
+    sqlx::query(
+        "insert into pack_versions (name, version, description, content_hash, tarball_path, \
+         tarball_sha256, has_function_rules, consumes, languages, requires_topic, \
+         artifact_prefix, published_at, submission_id) \
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), $12) \
+         on conflict (name, version) do nothing",
+    )
+    .bind(&sub.pack_name)
+    .bind(&sub.version)
+    .bind(manifest.get("description").cloned().unwrap_or(Value::Null))
+    .bind(content_hash)
+    .bind(tarball_path)
+    .bind(tarball_sha256)
+    .bind(has_function_rules)
+    .bind(manifest.get("consumes").cloned().unwrap_or(json!([])))
+    .bind(manifest.get("languages").cloned().unwrap_or(json!([])))
+    .bind(manifest.get("requiresTopic").and_then(Value::as_bool).unwrap_or(false))
+    .bind(manifest.get("artifactPrefix").and_then(Value::as_str))
+    .bind(sub.id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 

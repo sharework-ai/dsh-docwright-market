@@ -72,6 +72,24 @@ pub async fn require_admin(state: &AppState, headers: &HeaderMap) -> Result<Auth
     }
 }
 
+/// The caller plus their publisher org — submission and publishing both ride
+/// on it. A missing/null org is a precondition failure, not a 401: the
+/// account page is where that gets fixed.
+pub async fn require_org(state: &AppState, headers: &HeaderMap) -> Result<(AuthUser, String), AppError> {
+    let user = require_user(state, headers).await?;
+    let org: Option<(Option<String>,)> =
+        sqlx::query_as("select org from profiles where id = $1")
+            .bind(user.id)
+            .fetch_optional(&state.db)
+            .await?;
+    match org.and_then(|(o,)| o) {
+        Some(org) => Ok((user, org)),
+        None => Err(AppError::forbidden(
+            "set your publisher org on the account page before submitting",
+        )),
+    }
+}
+
 async fn verify_token(state: &AppState, token: &str) -> Result<AuthUser, String> {
     if let Some(user) = verify_via_jwks(state, token).await {
         return Ok(user);

@@ -21,7 +21,10 @@ aliyun DNS → t2 frps(SNI 分流)→ frpc(`dm-web-macus` / `sb-web-macus`
 ## 部署 / 升级
 
 ```sh
-deploy/build.sh                 # 组装 context + podman build 两镜像 + 导入 k3s
+# 1. schema 迁移先行(新 server + 旧库才是不行的组合;旧 server + 新库无碍)
+~/projects/commons/supabase/setup.sh apply-migration supabase/migrations/0002_org_versions.sql
+# 2. 镜像 + 部署
+deploy/build.sh                 # 组装 context + podman build 镜像 + 导入 k3s
 deploy/deploy.sh --tag <tag>    # ns/secret(幂等)+ apply + rollout 等待
 ```
 
@@ -30,6 +33,23 @@ deploy/deploy.sh --tag <tag>    # ns/secret(幂等)+ apply + rollout 等待
   checkout(与 pack:check 实际运行环境 1:1),镜像只提供 node。
 - server 二进制/web 变更 → 重跑 build.sh;verifier 脚本变更(hostPath)→
   `kubectl -n market rollout restart deploy/market-verifier` 即生效。
+- 迁移必须**纯 SQL**(sqlx::test 在无 storage schema 的 scratch 库上跑全
+  目录迁移);桶供给在 provision/storage-buckets.sql 与服务端 ensure_buckets。
+- 组织保留名是代码常量(`ORG_RESERVED`),**零新增环境变量**——podman save →
+  ctr import 丢镜像 ENV,新增配置一律走 deploy.sh secret + k8s.yaml 显式注入。
+
+## 线上数据清理(一次性,e2e 残留)
+
+```sh
+scripts/ops/cleanup-e2e-residue.sh             # dry run:列出将删的账号与数据
+scripts/ops/cleanup-e2e-residue.sh --apply     # 真删(默认保护 peng_long@hisuntech.com)
+```
+
+选择集 = email 匹配 `@example.invalid` / `@x.invalid` 的 auth.users(e2e 残留
+账号多为 admin 标,故 is_admin **不**作为保护条件);删除顺序:Storage 对象 →
+pack_versions → packs → submissions → profiles → GoTrue admin delete(children
+先于 auth.users:`packs.author_id` 与 `submissions.uploader` 无级联)。清理后
+由真实账号在 `/account.html` 设组织,再经 `/submit.html` 重新投稿 task-card。
 
 ## 服务端配置(全环境变量,缺失即启动失败)
 
@@ -42,7 +62,7 @@ deploy/deploy.sh --tag <tag>    # ns/secret(幂等)+ apply + rollout 等待
 | `DATABASE_URL` | `postgres://postgres:…@supabase-postgres.supabase.svc:5432/postgres` |
 | `VERIFIER_URL` | `http://verifier.market.svc:8399` |
 | `LISTEN_HOST` / `PORT` | `0.0.0.0` / `8398`(loopback 默认,宿主直跑时) |
-| `WEB_DIR` / `DATA_DIR` | 静态页 / 暂存目录 |
+| `WEB_DIR` | 静态页目录 |
 
 verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
 `VERIFIER_HOST`(容器内 0.0.0.0)、`VERIFIER_TMP`、`VERIFIER_MAX_BYTES`。
@@ -59,7 +79,10 @@ verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
   GOTRUE_API_PORT=9999 对齐 svc targetPort,labels 三件套对齐 svc selector)。
   改 auth 配置 = 直接改该 deployment;升级 operator 前先备份其 spec。
 - 账号注册即确认(AUTOCONFIRM,无 SMTP);管理员 = profiles.is_admin=true。
-- 目录重置(测试):`truncate table submissions, packs;`
+  密码修改 = 浏览器侧 `PUT /auth/v1/user`(supabase-js updateUser),无需改
+  auth 配置。
+- e2e 的目录重置是**残留范围删除**(按测试邮箱域),绝不能 truncate——线上
+  目录属于真实账号;e2e 结束时 teardown 删除本次创建的账号与其数据。
 
 ## 日常运维速查
 

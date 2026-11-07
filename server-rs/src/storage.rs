@@ -86,6 +86,36 @@ pub async fn download(
     }
 }
 
+/// Delete a stored object. 404 counts as success (idempotent deletes).
+/// Returns the failure as a plain string on purpose: callers use it in
+/// best-effort paths (pack deletion, submission withdrawal) where the detail
+/// belongs in a warning list, not in AppError::internal — which would log it
+/// but flatten the message to "internal error".
+pub async fn delete(
+    state: &AppState,
+    bucket: &str,
+    object_path: &str,
+) -> Result<(), String> {
+    let url = format!(
+        "{}/storage/v1/object/{}/{}",
+        state.cfg.supabase_api_url, bucket, object_path
+    );
+    let response = state
+        .http
+        .delete(url)
+        .header("authorization", format!("Bearer {}", state.cfg.supabase_secret_key))
+        .send()
+        .await
+        .map_err(|e| format!("storage unreachable: {e}"))?;
+    let status = response.status();
+    if status.is_success() || status == reqwest::StatusCode::NOT_FOUND {
+        Ok(())
+    } else {
+        let body = response.text().await.unwrap_or_default();
+        Err(format!("storage delete {bucket}/{object_path} -> {status}: {body}"))
+    }
+}
+
 /// Public read URL of a tarball (the bucket is public; install.mjs follows it).
 pub fn public_url(state: &AppState, object_path: &str) -> String {
     format!(

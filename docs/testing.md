@@ -8,10 +8,10 @@
 | 层 | 工具 | 覆盖对象 | 现状 |
 |---|---|---|---|
 | 单元 + 覆盖率门(node) | vitest + v8 coverage | verifier/index.mjs(校验面):HTTP 端点、形状规则、解包安全、内容哈希 | 23 用例,92.3% 行(门:行/函数/语句 85%、分支 75%) |
-| 安装器(node) | vitest(spawn CLI + 本地假 market) | install.mjs:退出码 0/2/3、落盘文件、全部完整性拒绝 | 7 用例 |
+| 安装器(node) | vitest(spawn CLI + 本地假 market) | install.mjs:退出码 0/2/3、落盘文件、全部完整性拒绝、format 2 钉版安装、410 下架语义 | 15 用例 |
 | 单元(Rust) | cargo test(rust-dev 容器) | semver(含 pre-release)、bearer 解析、sha256 向量 | 3 用例 |
-| 集成(Rust) | sqlx::test + wiremock | 市场规则全集、发布 upsert、审核迁移、读侧 handler、认证拒绝路径 | 15 用例,Rust 合计 ~80% 行 |
-| 端到端 | scripts/e2e/run.sh | 打已部署集群的 5 个场景 | 全绿 |
+| 集成(Rust) | sqlx::test + wiremock | 市场规则全集、发布 upsert + 版本历史、审核迁移、读侧 handler、组织级联/唯一/保留字、属主管理(下架/删除/撤回)、认证拒绝路径 | 37 用例 |
+| 端到端 | scripts/e2e/run.sh | 打已部署集群的 7 个场景 | 全绿 |
 
 ## 各层钉什么
 
@@ -48,11 +48,18 @@ sha256/内容哈希/名字不匹配的拒绝(退出码 2)、重装冲突(退出�
 
 | 场景 | 钉住 |
 |---|---|
-| happy-chain | 投稿 → 校验绿 → 审核 → 发布 → 目录/索引/详情一致 |
+| happy-chain | 设组织 → 投稿 → 校验绿 → 审核 → 发布 → 目录/详情(org)/format:2 索引(含 versions[])一致 |
 | status-polling | 作者可见状态流转(pending → approved)与报告 |
-| rules | R1 401 未认证 / R2 400 非法分类 / R3 403 非管理员队列 / R4 403 冒名更新(verifier 绿的升版包,拒绝落在所有权规则上)/ R5+R6 409 版本占用与重复投稿 |
+| rules | R1 401 未认证 / R7 403 无组织投稿 / R2 400 非法分类 / R3 403 非管理员队列 / R4 403 冒名更新(verifier 绿的升版包,拒绝落在所有权规则上)/ R5+R6 409 版本占用与重复投稿 |
 | builtin-name-collision | 撞内置名在形状门被拒,零落库 |
-| consumer-install | install.mjs 从真实市场装出 → 装出副本再过 docwright pack:check → 重装冲突与 --force |
+| consumer-install | install.mjs 装最新 + 钉版装旧版(落盘版本对得上)→ 未知钉版报错 → 装出副本再过 docwright pack:check → 重装冲突与 --force |
+| owner-lifecycle | 组织级联改名 / 版本历史与旧版 tarball 200 / PATCH 元数据与白名单 / 下架(410+隐藏)且禁用期发布保持下架 / 恢复 / 撤回待审 / 硬删后名字释放但 (name,version) 永久保留 |
+| password-change | 真 GoTrue 改密:旧密码失效、新密码可登录、轮换后的身份仍过市场验签 |
+
+场景一律发布**改名 fixture**(`sample_archive_as e2e-card x.y.z`),不碰真实
+task-card(它属于真实账号,所有权/版本规则会拒绝);账号注册即登记,套件
+退出时 teardown 删除本次创建的账号、数据与 Storage 对象——测试不再在线上
+留任何残留。目录重置是残留范围删除,永不 truncate。
 
 ## 跑法
 

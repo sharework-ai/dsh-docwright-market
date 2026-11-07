@@ -37,6 +37,16 @@ pub(crate) async fn seed_user(pool: &PgPool, id: Uuid) {
         .expect("seed auth user");
 }
 
+/// Profiles row with (optionally) a publisher org — submitting requires one.
+pub(crate) async fn seed_profile(pool: &PgPool, id: Uuid, org: Option<&str>) {
+    sqlx::query("insert into profiles (id, org) values ($1, $2)")
+        .bind(id)
+        .bind(org)
+        .execute(pool)
+        .await
+        .expect("seed profile");
+}
+
 pub(crate) async fn seed_pack(pool: &PgPool, name: &str, version: &str, author_id: Uuid, hash: &str) {
     sqlx::query(
         "insert into packs (name, version, description, category, author, author_id, license, \
@@ -166,10 +176,11 @@ async fn identical_content_is_rejected(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]
-async fn first_publish_lands_the_catalog_row(pool: PgPool) {
+async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
     init_log();
     let uploader = Uuid::new_v4();
     seed_user(&pool, uploader).await;
+    seed_profile(&pool, uploader, Some("sharework-ai")).await;
     let sub = SubmissionRow {
         id: Uuid::new_v4(),
         pack_name: "published-pack".into(),
@@ -189,13 +200,13 @@ async fn first_publish_lands_the_catalog_row(pool: PgPool) {
         "requiresTopic": true,
         "artifactPrefix": "CARD",
     });
-    upsert_published_pack(&pool, &sub, &manifest, "sha256:h1", true, "tarballs/p-0.1.0.tgz", "sha256:t1")
+    upsert_published_pack(&pool, &sub, &manifest, "sha256:h1", true, "tarballs/p-0.1.0.tgz", "sha256:t1", "sharework-ai")
         .await
         .expect("first publish writes the row");
 
-    let row: (String, Value, bool, bool, String, String) = sqlx::query_as(
-        "select version, description, has_function_rules, requires_topic, category, author \
-         from packs where name = 'published-pack'",
+    let row: (String, Value, bool, bool, String, String, Option<String>, String) = sqlx::query_as(
+        "select version, description, has_function_rules, requires_topic, category, author, \
+         org, status from packs where name = 'published-pack'",
     )
     .fetch_one(&pool)
     .await
@@ -206,6 +217,19 @@ async fn first_publish_lands_the_catalog_row(pool: PgPool) {
     assert!(row.3, "requiresTopic from the manifest");
     assert_eq!(row.4, "dev");
     assert_eq!(row.5, "sharework-ai");
+    assert_eq!(row.6.as_deref(), Some("sharework-ai"), "org stamped from the uploader profile");
+    assert_eq!(row.7, "active", "new packs start active");
+
+    // The publish also opened the version history, carrying provenance.
+    let (versions, submission_id): (i64, Option<Uuid>) = sqlx::query_as(
+        "select count(*), (select submission_id from pack_versions where name = 'published-pack' limit 1) \
+         from pack_versions where name = 'published-pack'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(versions, 1);
+    assert_eq!(submission_id, Some(sub.id));
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]
@@ -226,7 +250,7 @@ async fn update_publish_overwrites_but_keeps_added(pool: PgPool) {
         homepage: None,
     };
     let manifest = json!({ "description": { "en": "v1" }, "consumes": [], "languages": [] });
-    upsert_published_pack(&pool, &sub, &manifest, "sha256:v1", false, "tarballs/a-0.1.0.tgz", "sha256:t1")
+    upsert_published_pack(&pool, &sub, &manifest, "sha256:v1", false, "tarballs/a-0.1.0.tgz", "sha256:t1", "org-a")
         .await
         .expect("v1 publish");
 
@@ -235,7 +259,7 @@ async fn update_publish_overwrites_but_keeps_added(pool: PgPool) {
 
     sub.version = "0.2.0".into();
     let manifest2 = json!({ "description": { "en": "v2" }, "consumes": [], "languages": [] });
-    upsert_published_pack(&pool, &sub, &manifest2, "sha256:v2", true, "tarballs/a-0.2.0.tgz", "sha256:t2")
+    upsert_published_pack(&pool, &sub, &manifest2, "sha256:v2", true, "tarballs/a-0.2.0.tgz", "sha256:t2", "org-a")
         .await
         .expect("v2 publish overwrites");
 
@@ -257,6 +281,59 @@ async fn update_publish_overwrites_but_keeps_added(pool: PgPool) {
     assert!(fn_rules);
     assert_eq!(added, added2, "added is preserved across updates");
     assert!(updated >= added);
+
+    let (history, old_paths): (i64, i64) = sqlx::query_as(
+        "select count(*), count(*) filter (where version = '0.1.0' and tarball_path = 'tarballs/a-0.1.0.tgz') \
+         from pack_versions where name = 'aging-pack'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(history, 2, "each publish appends a history row");
+    assert_eq!(old_paths, 1, "the old version's tarball path stays intact");
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn republishing_keeps_a_disabled_pack_disabled(pool: PgPool) {
+    init_log();
+    let uploader = Uuid::new_v4();
+    seed_user(&pool, uploader).await;
+    let mut sub = SubmissionRow {
+        id: Uuid::new_v4(),
+        pack_name: "benched-pack".into(),
+        version: "0.1.0".into(),
+        uploader,
+        archive_path: None,
+        report: json!({}),
+        category: Some("dev".into()),
+        author: Some("a".into()),
+        license: Some("MIT".into()),
+        homepage: None,
+    };
+    let manifest = json!({ "description": { "en": "v1" }, "consumes": [], "languages": [] });
+    upsert_published_pack(&pool, &sub, &manifest, "sha256:v1", false, "tarballs/b-0.1.0.tgz", "sha256:t1", "org-a")
+        .await
+        .expect("v1 publish");
+    sqlx::query("update packs set status = 'disabled' where name = 'benched-pack'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    sub.version = "0.2.0".into();
+    let manifest2 = json!({ "description": { "en": "v2" }, "consumes": [], "languages": [] });
+    upsert_published_pack(&pool, &sub, &manifest2, "sha256:v2", true, "tarballs/b-0.2.0.tgz", "sha256:t2", "org-a")
+        .await
+        .expect("v2 publish lands even while disabled");
+
+    let (status, versions): (String, i64) = sqlx::query_as(
+        "select p.status, (select count(*) from pack_versions v where v.name = p.name) \
+         from packs p where p.name = 'benched-pack'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "disabled", "publishing must not silently re-enable");
+    assert_eq!(versions, 2, "history grows even while disabled");
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]
@@ -311,10 +388,10 @@ fn test_state_with(pool: &PgPool, supabase_api_url: &str) -> Arc<crate::state::A
             supabase_api_url: supabase_api_url.into(),
             supabase_secret_key: "test".into(),
             supabase_publishable_key: "test".into(),
+            supabase_public_url: "http://supabase.invalid".into(),
             database_url: String::new(),
             verifier_url: "http://127.0.0.1:1".into(),
             web_dir: String::new(),
-            data_dir: String::new(),
             public_origin: "http://127.0.0.1:8398".into(),
             source_url: "https://example.invalid/repo".into(),
         },
@@ -350,7 +427,7 @@ async fn seed_full_pack(pool: &PgPool, name: &str) -> Uuid {
         "requiresTopic": true,
         "artifactPrefix": "CARD",
     });
-    upsert_published_pack(pool, &sub, &manifest, "sha256:h", false, &format!("tarballs/{name}-0.1.0.tgz"), "sha256:t")
+    upsert_published_pack(pool, &sub, &manifest, "sha256:h", false, &format!("tarballs/{name}-0.1.0.tgz"), "sha256:t", "sharework-ai")
         .await
         .expect("seed publish");
     // The detail page's health sheet comes from the approved submission.
@@ -409,42 +486,48 @@ async fn pack_detail_404s_on_unknown_names(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]
-async fn index_is_format_one_with_relative_tarball_paths(pool: PgPool) {
+async fn index_is_format_two_with_org_and_version_history(pool: PgPool) {
     init_log();
     let state = test_state(pool);
     seed_full_pack(&state.db, "idx-pack").await;
 
     let index = super::packs::index(State(state)).await.unwrap().0;
-    assert_eq!(index["format"], 1);
+    assert_eq!(index["format"], 2, "install.mjs keys off the format number");
     assert_eq!(index["origin"], "http://127.0.0.1:8398");
     let pack = &index["packs"][0];
     assert_eq!(pack["name"], "idx-pack");
     assert_eq!(pack["tarball"], "/tarballs/idx-pack-0.1.0.tgz");
     assert_eq!(pack["contentHash"], "sha256:h");
     assert_eq!(pack["tarballSha256"], "sha256:t");
+    assert_eq!(pack["org"], "sharework-ai");
     assert_eq!(pack["page"], "/p/idx-pack");
+    let versions = pack["versions"].as_array().expect("versions array");
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0]["version"], "0.1.0");
+    assert_eq!(versions[0]["tarball"], "/tarballs/idx-pack-0.1.0.tgz");
+    assert_eq!(versions[0]["tarballSha256"], "sha256:t");
+    assert_eq!(versions[0]["contentHash"], "sha256:h");
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]
-async fn tarball_route_redirects_known_paths_and_404s_unknown(pool: PgPool) {
+async fn tarball_route_maps_disabled_to_410_and_unknown_to_404(pool: PgPool) {
     init_log();
     let state = test_state(pool);
     seed_full_pack(&state.db, "dl-pack").await;
+    sqlx::query("update packs set status = 'disabled' where name = 'dl-pack'")
+        .execute(&state.db)
+        .await
+        .unwrap();
 
-    let hit = super::packs::tarball(
+    // Disabled packs answer 410 before any Storage traffic (this test's
+        // Supabase URL is a dead end on purpose — reaching it would 500).
+    let gone = super::packs::tarball(
         State(state.clone()),
         Path("dl-pack-0.1.0.tgz".into()),
     )
     .await
-    .unwrap();
-    assert!(hit.status().is_redirection(), "known tarball must redirect");
-    let location = hit
-        .headers()
-        .get("location")
-        .and_then(|v| v.to_str().ok())
-        .unwrap()
-        .to_string();
-    assert!(location.ends_with("/public/tarballs/dl-pack-0.1.0.tgz"), "{location}");
+    .expect_err("disabled pack must not serve bytes");
+    assert_eq!(gone.status, axum::http::StatusCode::GONE);
 
     let miss = super::packs::tarball(
         State(state),
@@ -453,6 +536,130 @@ async fn tarball_route_redirects_known_paths_and_404s_unknown(pool: PgPool) {
     .await
     .expect_err("unknown tarball must 404");
     assert_eq!(miss.status, axum::http::StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn disabled_packs_vanish_from_the_public_surface(pool: PgPool) {
+    init_log();
+    let state = test_state(pool);
+    seed_full_pack(&state.db, "quiet-pack").await;
+    sqlx::query("update packs set status = 'disabled' where name = 'quiet-pack'")
+        .execute(&state.db)
+        .await
+        .unwrap();
+
+    let list = super::packs::list(State(state.clone())).await.unwrap().0;
+    assert!(list["packs"].as_array().unwrap().is_empty(), "list hides disabled packs");
+
+    let index = super::packs::index(State(state.clone())).await.unwrap().0;
+    assert!(index["packs"].as_array().unwrap().is_empty(), "index hides disabled packs");
+
+    let error = super::packs::detail(State(state), Path("quiet-pack".into()))
+        .await
+        .expect_err("detail hides disabled packs");
+    assert_eq!(error.status, axum::http::StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn detail_lists_versions_newest_first(pool: PgPool) {
+    init_log();
+    let state = test_state(pool);
+    let uploader = seed_full_pack(&state.db, "hist-pack").await;
+    let sub = SubmissionRow {
+        id: Uuid::new_v4(),
+        pack_name: "hist-pack".into(),
+        version: "0.2.0".into(),
+        uploader,
+        archive_path: None,
+        report: json!({ "manifest": {} }),
+        category: Some("dev".into()),
+        author: Some("a".into()),
+        license: Some("MIT".into()),
+        homepage: None,
+    };
+    let manifest = json!({ "description": { "en": "v2" }, "consumes": [], "languages": [] });
+    upsert_published_pack(&state.db, &sub, &manifest, "sha256:h2", false, "tarballs/hist-pack-0.2.0.tgz", "sha256:t2", "sharework-ai")
+        .await
+        .expect("v2 publish");
+
+    let detail = super::packs::detail(State(state), Path("hist-pack".into()))
+        .await
+        .unwrap()
+        .0;
+    let versions = detail["versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 2);
+    assert_eq!(versions[0]["version"], "0.2.0", "newest publish first");
+    assert_eq!(versions[1]["version"], "0.1.0");
+    assert_eq!(versions[1]["tarball"], "/tarballs/hist-pack-0.1.0.tgz");
+    assert_eq!(detail["pack"]["version"], "0.2.0", "top level stays latest");
+}
+
+// ---- org --------------------------------------------------------------------
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn org_change_relabels_only_the_owners_packs(pool: PgPool) {
+    init_log();
+    let owner = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    for id in [owner, other] {
+        seed_user(&pool, id).await;
+    }
+    seed_profile(&pool, owner, Some("old-org")).await;
+    seed_profile(&pool, other, Some("other-org")).await;
+    seed_pack(&pool, "mine-1", "0.1.0", owner, "sha256:a").await;
+    seed_pack(&pool, "mine-2", "0.1.0", owner, "sha256:b").await;
+    seed_pack(&pool, "theirs", "0.1.0", other, "sha256:c").await;
+    // seed_pack leaves org null; give the other author's pack its real org so
+    // the "untouched" assertion below means something.
+    sqlx::query("update packs set org = 'other-org' where name = 'theirs'")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let affected = super::account::apply_org_change(&pool, owner, "new-org")
+        .await
+        .expect("org change succeeds");
+    assert_eq!(affected, 2, "only the owner's packs were relabeled");
+
+    let mine: (Option<String>, Option<String>) = sqlx::query_as(
+        "select (select org from packs where name = 'mine-1'), \
+                (select org from packs where name = 'theirs')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mine.0.as_deref(), Some("new-org"));
+    assert_eq!(mine.1.as_deref(), Some("other-org"), "another author's packs untouched");
+
+    let profile: (Option<String>,) =
+        sqlx::query_as("select org from profiles where id = $1").bind(owner).fetch_one(&pool).await.unwrap();
+    assert_eq!(profile.0.as_deref(), Some("new-org"));
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn org_slugs_are_unique_reserved_and_shape_checked(pool: PgPool) {
+    init_log();
+    let a = Uuid::new_v4();
+    let b = Uuid::new_v4();
+    seed_user(&pool, a).await;
+    seed_user(&pool, b).await;
+    seed_profile(&pool, a, Some("taken-org")).await;
+
+    let taken = super::account::apply_org_change(&pool, b, "taken-org")
+        .await
+        .expect_err("claiming another account's org must 409");
+    assert_eq!(taken.status, axum::http::StatusCode::CONFLICT);
+
+    for bad in ["-leading", "Upper", "with space", "admin", "docwright", "", "way-too-long-this-slug-keeps-going-beyond-the-thirty-nine-char-mark"] {
+        let err = super::account::apply_org_change(&pool, b, bad)
+            .await
+            .expect_err(format!("invalid org {bad:?} must 400").as_str());
+        assert_eq!(err.status, axum::http::StatusCode::BAD_REQUEST, "{bad:?}");
+    }
+
+    super::account::apply_org_change(&pool, b, "b-org").await.expect("valid org passes");
+    // Same account re-setting its own org is a no-op, not a conflict.
+    super::account::apply_org_change(&pool, b, "b-org").await.expect("re-set is idempotent");
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]

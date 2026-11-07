@@ -1,19 +1,25 @@
 #!/usr/bin/env bash
-# Happy chain: submit → machine verify → human approve → publish → the
-# catalog, index, and the author's submission view all agree.
+# Happy chain: set org → submit → machine verify → human approve → publish →
+# the catalog, index (format 2, org + version history), and the author's
+# submission view all agree.
+
+ORG_A="e2e-org-a-$(date +%s)$RANDOM"
+FIX="$T/fixture.tgz"
+sample_archive_as "e2e-card" "0.1.0" "$FIX"
 
 scenario happy-chain scenario_happy
 scenario_happy() {
   init_run
   create_account author || return 1
   seed_admin_profile "$LAST_USER_ID" || return 1
+  set_org "$ORG_A" || return 1
 
   # Before publish: the pack is absent from the catalog.
   local pre
-  pre="$(http_code "$MARKET/api/packs/task-card")"
+  pre="$(http_code "$MARKET/api/packs/e2e-card")"
   assert_eq "$pre" "404" "unpublished pack must 404" || return 1
 
-  submit_archive "$LAST_TOKEN" "$M/samples/task-card.tgz" || return 1
+  submit_archive "$LAST_TOKEN" "$FIX" || return 1
   local sub_id="$LAST_SUB_ID"
 
   # The author sees the pending state back through the API.
@@ -27,18 +33,23 @@ scenario_happy() {
     || { sc_fail "approve failed"; return 1; }
 
   local detail
-  detail="$(curl -sf -m 10 "$MARKET/api/packs/task-card")"
-  assert_contains "$detail" '"name":"task-card"' "catalog carries the pack" || return 1
-  assert_contains "$detail" '"health":"task-card@0.1.0' "detail carries the health sheet" || return 1
+  detail="$(curl -sf -m 10 "$MARKET/api/packs/e2e-card")"
+  assert_contains "$detail" '"name":"e2e-card"' "catalog carries the pack" || return 1
+  assert_contains "$detail" '"org":"'"$ORG_A"'"' "catalog carries the publisher org" || return 1
+  assert_contains "$detail" '"health":"e2e-card@0.1.0' "detail carries the health sheet" || return 1
 
-  # Index is format-1 with integrity fields.
+  # Index is format-2 with org + version history and integrity fields.
   curl -sf -m 10 "$MARKET/api/index" | python3 -c '
 import json, sys
 idx = json.load(sys.stdin)
-assert idx["format"] == 1, idx
-p = [x for x in idx["packs"] if x["name"] == "task-card"]
+assert idx["format"] == 2, idx
+p = [x for x in idx["packs"] if x["name"] == "e2e-card"]
 assert p, idx
-assert p[0]["tarball"] and p[0]["tarballSha256"] and p[0]["contentHash"], p
+p = p[0]
+assert p["tarball"] and p["tarballSha256"] and p["contentHash"], p
+assert p["org"], p
+assert len(p["versions"]) == 1 and p["versions"][0]["version"] == "0.1.0", p
+assert p["versions"][0]["tarballSha256"], p
 ' || { sc_fail "index incomplete"; return 1; }
 }
 
@@ -47,7 +58,8 @@ scenario_status_polling() {
   init_run
   create_account author || return 1
   seed_admin_profile "$LAST_USER_ID" || return 1
-  submit_archive "$LAST_TOKEN" "$M/samples/task-card.tgz" || return 1
+  set_org "$ORG_A-b" || return 1
+  submit_archive "$LAST_TOKEN" "$FIX" || return 1
   local sub_id="$LAST_SUB_ID"
 
   # Pending view includes the verification report the author can inspect.

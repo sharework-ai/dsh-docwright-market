@@ -24,6 +24,10 @@ impl AppError {
     pub fn not_found(message: impl Into<String>) -> Self {
         Self { status: StatusCode::NOT_FOUND, message: message.into() }
     }
+    /// Disabled packs: the resource existed and may again, but is withheld now.
+    pub fn gone(message: impl Into<String>) -> Self {
+        Self { status: StatusCode::GONE, message: message.into() }
+    }
     pub fn conflict(message: impl Into<String>) -> Self {
         Self { status: StatusCode::CONFLICT, message: message.into() }
     }

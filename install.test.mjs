@@ -18,6 +18,8 @@ const INSTALL = path.join(REPO, 'install.mjs')
 
 let tgzBytes
 let packHash
+let oldTgzBytes
+let oldPackHash
 let index
 let server
 let baseUrl
@@ -53,21 +55,30 @@ async function fs_readdirSorted(current) {
 }
 
 beforeAll(async () => {
-  // A real docwright pack archive: build one from files on disk.
-  const src = await mkdtemp(path.join(os.tmpdir(), 'install-test-src-'))
-  const packDir = path.join(src, 'fixture-pack')
-  await mkdir(packDir)
-  await writeFile(path.join(packDir, 'manifest.json'), JSON.stringify({ name: 'fixture-pack', version: '0.1.0' }))
-  await writeFile(path.join(packDir, 'schema.json'), '{}')
-  const tgzPath = path.join(src, 'pack.tgz')
-  spawnSync('tar', ['czf', tgzPath, '-C', src, 'fixture-pack'])
-  tgzBytes = await readFile(tgzPath)
-
-  const unpack = await mkdtemp(path.join(os.tmpdir(), 'install-test-hash-'))
-  spawnSync('tar', ['xzf', tgzPath, '-C', unpack])
-  packHash = await dirHash(path.join(unpack, 'fixture-pack'))
-  await rm(src, { recursive: true, force: true })
-  await rm(unpack, { recursive: true, force: true })
+  // A real docwright pack archive: build one from files on disk. A second,
+  // byte-different 0.0.9 archive backs the pinned-version tests.
+  const buildArchive = async version => {
+    const src = await mkdtemp(path.join(os.tmpdir(), 'install-test-src-'))
+    const packDir = path.join(src, 'fixture-pack')
+    await mkdir(packDir)
+    await writeFile(path.join(packDir, 'manifest.json'), JSON.stringify({ name: 'fixture-pack', version }))
+    await writeFile(path.join(packDir, 'schema.json'), '{}')
+    const tgzPath = path.join(src, 'pack.tgz')
+    spawnSync('tar', ['czf', tgzPath, '-C', src, 'fixture-pack'])
+    const bytes = await readFile(tgzPath)
+    const unpack = await mkdtemp(path.join(os.tmpdir(), 'install-test-hash-'))
+    spawnSync('tar', ['xzf', tgzPath, '-C', unpack])
+    const hash = await dirHash(path.join(unpack, 'fixture-pack'))
+    await rm(src, { recursive: true, force: true })
+    await rm(unpack, { recursive: true, force: true })
+    return { bytes, hash }
+  }
+  const latest = await buildArchive('0.1.0')
+  tgzBytes = latest.bytes
+  packHash = latest.hash
+  const old = await buildArchive('0.0.9')
+  oldTgzBytes = old.bytes
+  oldPackHash = old.hash
 
   index = makeIndex()
 
@@ -80,6 +91,16 @@ beforeAll(async () => {
     if (req.url === '/tarballs/fixture-pack-0.1.0.tgz') {
       res.writeHead(200, { 'content-type': 'application/octet-stream' })
       res.end(tgzBytes)
+      return
+    }
+    if (req.url === '/tarballs/fixture-pack-0.0.9.tgz') {
+      res.writeHead(200, { 'content-type': 'application/octet-stream' })
+      res.end(oldTgzBytes)
+      return
+    }
+    if (req.url === '/tarballs/gone.tgz') {
+      res.writeHead(410)
+      res.end('disabled')
       return
     }
     res.writeHead(404)
@@ -95,15 +116,16 @@ afterAll(async () => {
   await rm(targetsRoot, { recursive: true, force: true })
 })
 
-function makeIndex() {
+function makeIndex({ format = 1, versions } = {}) {
   return {
-    format: 1,
+    format,
     packs: [{
       name: 'fixture-pack',
       version: '0.1.0',
       description: { en: 'fixture', zh: '夹具' },
       category: 'dev',
       author: 'someone',
+      org: 'fixture-org',
       license: 'MIT',
       consumes: ['cosmic-func'],
       languages: ['zh-CN'],
@@ -111,8 +133,33 @@ function makeIndex() {
       contentHash: packHash,
       tarball: '/tarballs/fixture-pack-0.1.0.tgz',
       tarballSha256: sha256(tgzBytes),
+      ...(versions ? { versions } : {}),
     }],
   }
+}
+
+function versionIndex() {
+  return makeIndex({
+    format: 2,
+    versions: [
+      {
+        version: '0.1.0',
+        tarball: '/tarballs/fixture-pack-0.1.0.tgz',
+        tarballSha256: sha256(tgzBytes),
+        contentHash: packHash,
+        hasFunctionRules: false,
+        publishedAt: '2026-11-07T00:00:00Z',
+      },
+      {
+        version: '0.0.9',
+        tarball: '/tarballs/fixture-pack-0.0.9.tgz',
+        tarballSha256: sha256(oldTgzBytes),
+        contentHash: oldPackHash,
+        hasFunctionRules: false,
+        publishedAt: '2026-11-06T00:00:00Z',
+      },
+    ],
+  })
 }
 
 function freshInto(tag) {
@@ -195,4 +242,96 @@ test('unknown pack is a clean failure (exit 2)', async () => {
   const r = await run(['ghost-pack', '--into', freshInto('ghost')])
   assert.equal(r.status, 2)
   assert.match(r.stderr, /not in the index/)
+})
+
+// ---- format 2: org, version history, pinned installs ------------------------
+
+test('--list on a format-2 index shows org and the version count', async () => {
+  index = versionIndex()
+  try {
+    const r = await run(['--list'])
+    assert.equal(r.status, 0)
+    assert.match(r.stdout, /<fixture-org>/)
+    assert.match(r.stdout, /\(2 versions\)/)
+  } finally {
+    index = makeIndex()
+  }
+})
+
+test('format-2 unpinned install lands the latest version', async () => {
+  index = versionIndex()
+  try {
+    const into = freshInto('fmt2-latest')
+    const r = await run(['fixture-pack', '--into', into])
+    assert.equal(r.status, 0, r.stderr || r.stdout)
+    assert.match(r.stdout, /installed fixture-pack@0\.1\.0/)
+  } finally {
+    index = makeIndex()
+  }
+})
+
+test('pinned install fetches the exact old version and verifies against its hashes', async () => {
+  index = versionIndex()
+  try {
+    const into = freshInto('fmt2-pinned')
+    const r = await run(['fixture-pack@0.0.9', '--into', into])
+    assert.equal(r.status, 0, r.stderr || r.stdout)
+    assert.match(r.stdout, /installed fixture-pack@0\.0\.9/)
+    const manifest = JSON.parse(readFileSync(path.join(into, 'fixture-pack', 'manifest.json'), 'utf8'))
+    assert.equal(manifest.version, '0.0.9', 'the landed bytes are the pinned version, not latest')
+  } finally {
+    index = makeIndex()
+  }
+})
+
+test('pinning the current version on format 2 also works', async () => {
+  index = versionIndex()
+  try {
+    const into = freshInto('fmt2-pin-latest')
+    const r = await run(['fixture-pack@0.1.0', '--into', into])
+    assert.equal(r.status, 0, r.stderr || r.stdout)
+  } finally {
+    index = makeIndex()
+  }
+})
+
+test('pinning an unknown version lists what exists (exit 2)', async () => {
+  index = versionIndex()
+  try {
+    const r = await run(['fixture-pack@9.9.9', '--into', freshInto('fmt2-miss')])
+    assert.equal(r.status, 2)
+    assert.match(r.stderr, /no version 9\.9\.9/)
+    assert.match(r.stderr, /0\.1\.0, 0\.0\.9/)
+  } finally {
+    index = makeIndex()
+  }
+})
+
+test('format-1 pinned to a non-current version keeps the old contract (exit 2)', async () => {
+  const r = await run(['fixture-pack@0.0.9', '--into', freshInto('fmt1-pin')])
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /no version 0\.0\.9/)
+})
+
+test('a disabled pack (410) reports the disable, not a generic fetch error', async () => {
+  index.packs[0].tarball = '/tarballs/gone.tgz'
+  const into = freshInto('gone')
+  try {
+    const r = await run(['fixture-pack', '--into', into])
+    assert.equal(r.status, 2)
+    assert.match(r.stderr, /disabled by its owner/)
+  } finally {
+    index.packs[0].tarball = '/tarballs/fixture-pack-0.1.0.tgz'
+  }
+})
+
+test('an unknown future index format is refused (exit 2)', async () => {
+  index = makeIndex({ format: 3 })
+  try {
+    const r = await run(['--list'])
+    assert.equal(r.status, 2)
+    assert.match(r.stderr, /unsupported index format: 3/)
+  } finally {
+    index = makeIndex()
+  }
 })
