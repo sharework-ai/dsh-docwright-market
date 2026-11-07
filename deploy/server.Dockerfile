@@ -19,9 +19,13 @@ WORKDIR /build/server-rs
 ENV CARGO_TARGET_DIR=/build/target \
     CARGO_BUILD_JOBS=8
 RUN cargo build --release
+# Build-time volume content is NOT captured into image layers, so the final
+# stage cannot COPY --from the mounted target dir — materialize the binary
+# into the layer first.
+RUN cp /build/target/release/docwright-market /out-docwright-market
 
 FROM ${RUNTIME_IMAGE}
-COPY --from=build /build/target/release/docwright-market /app/docwright-market
+COPY --from=build /out-docwright-market /app/docwright-market
 COPY web /app/web
 USER app
 WORKDIR /app
