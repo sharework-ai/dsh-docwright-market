@@ -14,6 +14,10 @@ pub struct Config {
     pub supabase_secret_key: String,
     /// Publishable key exposed to the web UI via /config.json.
     pub supabase_publishable_key: String,
+    /// Browser-facing Supabase URL (public domain, e.g. https://sb.shrwk.com).
+    /// The server itself talks to SUPABASE_API_URL over the cluster-internal
+    /// svc — browsers can never resolve those names.
+    pub supabase_public_url: String,
     /// Direct Postgres connection for sqlx (cluster-internal or port-forwarded).
     pub database_url: String,
     /// Verification sidecar base URL (POST /verify).
@@ -58,6 +62,7 @@ impl Config {
             supabase_api_url: env("SUPABASE_API_URL").trim_end_matches('/').to_string(),
             supabase_secret_key: env("SUPABASE_SECRET_KEY"),
             supabase_publishable_key: env("SUPABASE_PUBLISHABLE_KEY"),
+            supabase_public_url: env("PUBLIC_SUPABASE_URL").trim_end_matches('/').to_string(),
             database_url: env("DATABASE_URL"),
             verifier_url: env_or("VERIFIER_URL", "http://127.0.0.1:8399")
                 .trim_end_matches('/')

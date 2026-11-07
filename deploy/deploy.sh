@@ -26,6 +26,7 @@ kubectl -n "$NS" create secret generic market-env \
   --from-literal=SUPABASE_API_URL="http://supabase-envoy.supabase.svc:8000" \
   --from-literal=SUPABASE_SECRET_KEY="$(get_secret supabase-jwt service-key)" \
   --from-literal=SUPABASE_PUBLISHABLE_KEY="$(get_secret supabase-jwt publishable-key)" \
+  --from-literal=PUBLIC_SUPABASE_URL="https://sb.shrwk.com" \
   --from-literal=DATABASE_URL="postgres://postgres:$(get_secret supabase-postgres-auth password)@supabase-postgres.supabase.svc:5432/postgres" \
   --from-literal=VERIFIER_URL="http://verifier.$NS.svc:8399" \
   --from-literal=PUBLIC_ORIGIN="https://dm.shrwk.com" \

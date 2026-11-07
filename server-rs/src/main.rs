@@ -64,7 +64,7 @@ async fn main() {
 /// static pages never hardcode deployment values.
 async fn frontend_config(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     Json(json!({
-        "supabaseUrl": state.cfg.supabase_api_url,
+        "supabaseUrl": state.cfg.supabase_public_url,
         "supabasePublishableKey": state.cfg.supabase_publishable_key,
     }))
 }
