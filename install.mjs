@@ -104,11 +104,12 @@ function die(message, code = 2) {
 }
 
 const index = await fetchIndex().catch(e => die(`cannot read index: ${e.message}`))
-if (index.format !== 1) die(`unsupported index format: ${index.format}`)
+if (index.format !== 1 && index.format !== 2) die(`unsupported index format: ${index.format}`)
 
 if (listOnly) {
   for (const p of index.packs) {
-    console.log(`${p.name}@${p.version} [${p.category}] ${p.hasFunctionRules ? '(functions.js) ' : ''}${p.description?.en ?? ''}`)
+    const versions = p.versions?.length ? ` (${p.versions.length} versions)` : ''
+    console.log(`${p.name}@${p.version} [${p.category}]${p.org ? ` <${p.org}>` : ''}${versions} ${p.hasFunctionRules ? '(functions.js) ' : ''}${p.description?.en ?? ''}`)
   }
   console.log(`\n${index.packs.length} pack(s); market: ${market}`)
   process.exit(0)
@@ -118,10 +119,24 @@ const targets = all ? index.packs.map(p => p.name) : wanted
 const installed = []
 
 for (const request of targets) {
-  const [name, version] = request.split('@')
+  const at = request.lastIndexOf('@')
+  const name = at > 0 ? request.slice(0, at) : request
+  const version = at > 0 ? request.slice(at + 1) : undefined
   const entry = index.packs.find(p => p.name === name)
   if (!entry) die(`pack "${name}" not in the index (try --list)`)
-  if (version && entry.version !== version) die(`pack "${name}" is at ${entry.version}, requested ${version} — only the current version is served`)
+
+  // Resolve the install source: top-level fields are the latest version; a
+  // pinned request resolves through the version history (format 2). On a
+  // format-1 index only the current version exists, as before.
+  let src = { version: entry.version, tarball: entry.tarball, tarballSha256: entry.tarballSha256, contentHash: entry.contentHash }
+  if (version && version !== entry.version) {
+    const v = entry.versions?.find(x => x.version === version)
+    if (!v) {
+      const available = entry.versions?.map(x => x.version).join(', ') ?? 'none'
+      die(`pack "${name}" has no version ${version} (available: ${available})`)
+    }
+    src = { version: v.version, tarball: v.tarball, tarballSha256: v.tarballSha256, contentHash: v.contentHash }
+  }
 
   const dest = path.join(into, name)
   if (!force) {
@@ -131,16 +146,19 @@ for (const request of targets) {
     } catch { /* not installed yet: good */ }
   }
 
-  const url = refFor(entry.tarball)
+  const url = refFor(src.tarball)
   const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), `dw-install-${name}-`))
   try {
     const tgz = path.join(tmpRoot, 'pack.tgz')
     const res = await fetch(url)
-    if (!res.ok) die(`tarball ${url} -> ${res.status}`)
+    if (!res.ok) {
+      if (res.status === 410) die(`pack "${name}" has been disabled by its owner (410)`)
+      die(`tarball ${url} -> ${res.status}`)
+    }
     const bytes = Buffer.from(await res.arrayBuffer())
     const gotSha = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
-    if (gotSha !== entry.tarballSha256) {
-      die(`integrity check failed for ${name}: index says ${entry.tarballSha256}, got ${gotSha}`)
+    if (gotSha !== src.tarballSha256) {
+      die(`integrity check failed for ${name}: index says ${src.tarballSha256}, got ${gotSha}`)
     }
     await fs.writeFile(tgz, bytes)
 
@@ -163,8 +181,8 @@ for (const request of targets) {
     const manifest = JSON.parse(await fs.readFile(path.join(packDir, 'manifest.json'), 'utf8'))
     if (manifest.name !== name) die(`integrity mismatch: index says "${name}", archive manifest says "${manifest.name}"`)
     const hash = await dirHash(packDir)
-    if (hash !== entry.contentHash) {
-      die(`content hash mismatch for "${name}": index says ${entry.contentHash}, got ${hash}`)
+    if (hash !== src.contentHash) {
+      die(`content hash mismatch for "${name}": index says ${src.contentHash}, got ${hash}`)
     }
 
     // Atomic-ish landing: copy next to the destination, then rename over.
@@ -174,9 +192,9 @@ for (const request of targets) {
     await fs.cp(packDir, staged, { recursive: true })
     await fs.rm(dest, { recursive: true, force: true })
     await fs.rename(staged, dest)
-    installed.push(entry)
+    installed.push({ ...entry, version: src.version })
 
-    console.log(`installed ${name}@${entry.version} -> ${dest}`)
+    console.log(`installed ${name}@${src.version} -> ${dest}`)
   } finally {
     await fs.rm(tmpRoot, { recursive: true, force: true }).catch(() => {})
   }

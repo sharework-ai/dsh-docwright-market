@@ -47,7 +47,7 @@ podman run --rm --userns=keep-id -v "$PWD":/workspace -w /workspace/server-rs \
 
 ## 数据流与规则
 
-投稿(multipart)→ verifier 校验(报告落库)→ 待审队列(只有绿包进)→ 管理员 approve(Storage 归档 → packs upsert)→ 消费端按 index(format:1)安装。机器强制规则在 `server-rs/src/api/submissions.rs::check_submission_rules`:同名待审去重、(name,version) 唯一、属主校验、版本严格递增、内容哈希必须变化。DB 三表 packs/submissions/profiles,migration 在 `supabase/migrations/`(0000 是 auth schema stub,真库上 no-op)。
+投稿(要求账号已设发布者组织)→ verifier 校验(报告落库)→ 待审队列(只有绿包进)→ 管理员 approve(Storage 归档 → packs upsert + pack_versions 追加 + org 盖章)→ 消费端按 index(format:2,org + versions[],可钉版)安装。机器强制规则在 `server-rs/src/api/submissions.rs::check_submission_rules`:同名待审去重、(name,version) 唯一(**删除 pack 也不释放**——submissions 历史保留)、属主校验、版本严格递增、内容哈希必须变化。DB 四表 packs(最新版投影 + status/org)/pack_versions(版本历史)/submissions/profiles(org 全局唯一),migration 在 `supabase/migrations/`(0000 是 auth schema stub,真库上 no-op)。属主管理端点在 `api/owner.rs`(PATCH 元数据 / disable·enable / DELETE / my/submissions 撤回),组织端点在 `api/account.rs`;下架 pack 对公共读面不可见、tarball 410(`error.rs::gone`)。密码修改纯浏览器侧(GoTrue `PUT /auth/v1/user`),服务端不参与。
 
 ## 本仓库踩过的坑(复发时直接用)
 

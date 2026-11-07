@@ -10,7 +10,7 @@ use axum::Json;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use crate::auth::{require_admin, require_user, AuthUser};
+use crate::auth::{require_admin, require_org, require_user, AuthUser};
 use crate::config::{CATEGORY_WHITELIST, LICENSE_WHITELIST, MAX_ARCHIVE_BYTES};
 use crate::error::AppError;
 use crate::semver;
@@ -40,7 +40,9 @@ pub async fn submit(
     headers: HeaderMap,
     multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
 ) -> Result<Json<Value>, AppError> {
-    let user = require_user(&state, &headers).await?;
+    // Publisher-org precondition first: no multipart parsing, no verifier
+    // call, nothing stored before the account has an org.
+    let (user, _org) = require_org(&state, &headers).await?;
     let mut multipart = match multipart {
         Ok(m) => m,
         Err(_) => return Err(AppError::bad_request("expected multipart/form-data")),

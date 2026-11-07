@@ -1,5 +1,8 @@
 //! Public read surface: pack list, per-pack detail (with the health sheet),
-//! the machine-consumable format-1 index, and tarball downloads.
+//! the machine-consumable format-2 index, and tarball downloads. Disabled
+//! packs are absent from this whole surface (downloads answer 410, not 404 —
+//! "existed, withheld"), and version history makes every past release
+//! downloadable again.
 
 use std::sync::Arc;
 
@@ -7,7 +10,6 @@ use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::FromRow;
 
@@ -33,18 +35,20 @@ pub struct PackRow {
     pub content_hash: String,
     pub tarball_path: String,
     pub tarball_sha256: String,
+    pub org: Option<String>,
+    pub status: String,
     pub added: DateTime<Utc>,
     pub updated: DateTime<Utc>,
 }
 
 const PACK_COLUMNS: &str = "name, version, description, category, author, author_id, license, \
      homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
-     content_hash, tarball_path, tarball_sha256, added, updated";
+     content_hash, tarball_path, tarball_sha256, org, status, added, updated";
 
 /// GET /api/packs — the browser list page.
 pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, AppError> {
     let rows: Vec<PackRow> = sqlx::query_as::<_, PackRow>(
-        &format!("select {PACK_COLUMNS} from packs order by name"),
+        &format!("select {PACK_COLUMNS} from packs where status = 'active' order by name"),
     )
     .fetch_all(&state.db)
     .await?;
@@ -55,7 +59,7 @@ pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, App
 }
 
 /// GET /api/packs/{name} — detail incl. the latest health sheet (from the
-/// approved submission's verification report).
+/// approved submission's verification report) and the full version history.
 pub async fn detail(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -79,44 +83,47 @@ pub async fn detail(
     Ok(Json(json!({
         "ok": true,
         "pack": pack_json(&row),
+        "versions": versions_json(&state, &name).await?,
         "health": health_sheet,
         "verifiedAt": verified_at,
     })))
 }
 
-/// GET /api/index — format-1 machine catalog (install.mjs and future hosts).
+/// GET /api/index — format-2 machine catalog (install.mjs and future hosts).
+/// Top-level per-pack fields keep pointing at the latest version so an
+/// unpinned install behaves exactly as on format 1.
 pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, AppError> {
     let rows: Vec<PackRow> = sqlx::query_as::<_, PackRow>(
-        &format!("select {PACK_COLUMNS} from packs order by name"),
+        &format!("select {PACK_COLUMNS} from packs where status = 'active' order by name"),
     )
     .fetch_all(&state.db)
     .await?;
-    let packs = rows
-        .iter()
-        .map(|r| {
-            json!({
-                "name": r.name,
-                "version": r.version,
-                "description": r.description,
-                "category": r.category,
-                "author": r.author,
-                "license": r.license,
-                "consumes": r.consumes,
-                "languages": r.languages,
-                "requiresTopic": r.requires_topic,
-                "artifactPrefix": r.artifact_prefix,
-                "hasFunctionRules": r.has_function_rules,
-                "contentHash": r.content_hash,
-                "tarball": format!("/tarballs/{}-{}.tgz", r.name, r.version),
-                "tarballSha256": r.tarball_sha256,
-                "page": format!("/p/{}", r.name),
-                "added": r.added.date().to_string(),
-                "updated": r.updated.date().to_string(),
-            })
-        })
-        .collect::<Vec<_>>();
+    let mut packs = Vec::with_capacity(rows.len());
+    for r in &rows {
+        packs.push(json!({
+            "name": r.name,
+            "version": r.version,
+            "description": r.description,
+            "category": r.category,
+            "author": r.author,
+            "org": r.org,
+            "license": r.license,
+            "consumes": r.consumes,
+            "languages": r.languages,
+            "requiresTopic": r.requires_topic,
+            "artifactPrefix": r.artifact_prefix,
+            "hasFunctionRules": r.has_function_rules,
+            "contentHash": r.content_hash,
+            "tarball": format!("/tarballs/{}-{}.tgz", r.name, r.version),
+            "tarballSha256": r.tarball_sha256,
+            "page": format!("/p/{}", r.name),
+            "added": r.added.date().to_string(),
+            "updated": r.updated.date().to_string(),
+            "versions": versions_json(&state, &r.name).await?,
+        }));
+    }
     Ok(Json(json!({
-        "format": 1,
+        "format": 2,
         "generatedAt": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         "origin": state.cfg.public_origin,
         "source": state.cfg.source_url,
@@ -124,8 +131,11 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Ap
     })))
 }
 
-/// GET /tarballs/{name}-{version}.tgz — 302 to Storage's public URL. Only
-/// paths present in the packs table are served (no guessing, no traversal).
+/// GET /tarballs/{name}-{version}.tgz — proxy to Storage (its endpoint is
+/// cluster-internal; a 302 could never be followed by external clients).
+/// Lookup matches `pack_versions.tarball_path` exactly — never parse the
+/// filename, pack names and semver prereleases both contain dashes. Disabled
+/// packs answer 410; deleted packs (and stray guesses) 404.
 pub async fn tarball(
     State(state): State<Arc<AppState>>,
     Path(file): Path<String>,
@@ -137,15 +147,16 @@ pub async fn tarball(
     }
     let object_path = format!("tarballs/{file}");
     let hit: Option<(String,)> = sqlx::query_as(
-        "select tarball_path from packs where tarball_path = $1",
+        "select p.status from pack_versions v join packs p on p.name = v.name \
+         where v.tarball_path = $1",
     )
     .bind(&object_path)
     .fetch_optional(&state.db)
     .await?;
     match hit {
-        // Proxy instead of 302: the Storage endpoint is cluster-internal
-        // (supabase-envoy svc) — external clients could never follow that
-        // redirect. Small tarballs, one extra hop through the server is fine.
+        Some((status,)) if status == "disabled" => {
+            Err(AppError::gone("this pack has been disabled by its owner"))
+        }
         Some(_) => {
             let bytes = storage::download_public(&state, storage::BUCKET_TARBALLS, &file).await?;
             Ok((
@@ -159,13 +170,48 @@ pub async fn tarball(
 }
 
 async fn fetch_pack(state: &AppState, name: &str) -> Result<PackRow, AppError> {
-    sqlx::query_as::<_, PackRow>(&format!(
+    let row: Option<PackRow> = sqlx::query_as::<_, PackRow>(&format!(
         "select {PACK_COLUMNS} from packs where name = $1"
     ))
     .bind(name)
     .fetch_optional(&state.db)
     .await?
-    .ok_or_else(|| AppError::not_found(format!("no such pack: {name}")))
+    .filter(|r| r.status == "active");
+    row.ok_or_else(|| AppError::not_found(format!("no such pack: {name}")))
+}
+
+/// The version history of one pack, newest publish first. `tarball` uses the
+/// stored object path verbatim — no filename reconstruction.
+async fn versions_json(state: &AppState, name: &str) -> Result<Vec<Value>, AppError> {
+    #[derive(FromRow)]
+    struct VersionRow {
+        version: String,
+        content_hash: String,
+        tarball_path: String,
+        tarball_sha256: String,
+        has_function_rules: bool,
+        published_at: DateTime<Utc>,
+    }
+    let rows: Vec<VersionRow> = sqlx::query_as(
+        "select version, content_hash, tarball_path, tarball_sha256, has_function_rules, \
+         published_at from pack_versions where name = $1 order by published_at desc",
+    )
+    .bind(name)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|v| {
+            json!({
+                "version": v.version,
+                "tarball": format!("/{}", v.tarball_path),
+                "tarballSha256": v.tarball_sha256,
+                "contentHash": v.content_hash,
+                "hasFunctionRules": v.has_function_rules,
+                "publishedAt": v.published_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            })
+        })
+        .collect())
 }
 
 fn pack_json(r: &PackRow) -> Value {
@@ -175,6 +221,7 @@ fn pack_json(r: &PackRow) -> Value {
         "description": r.description,
         "category": r.category,
         "author": r.author,
+        "org": r.org,
         "license": r.license,
         "homepage": r.homepage,
         "consumes": r.consumes,

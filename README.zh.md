@@ -1,19 +1,23 @@
 # dsh-docwright-market
 
 [docwright](https://github.com/sharework-ai/dsh-docwright)(@sharework-ai/dsh-docwright)
-pack 的投稿式市场:作者从浏览器上传 `.tgz`,机器校验直接跑 docwright 自己的
-`pack:check`(golden 全绿才进审核队列),管理员人工审核通过后上架,消费端用
-零依赖脚本装进 `packsDir`。投稿不需要会 git/GitHub,注册只要一个邮箱。
+pack 的投稿式市场:作者先设发布者组织,从浏览器上传 `.tgz`,机器校验直接跑
+docwright 自己的 `pack:check`(golden 全绿才进审核队列),管理员人工审核通过
+即上架并写入版本历史,消费端用零依赖脚本装进 `packsDir`(可装最新,也可
+`name@version` 钉任意历史版本)。作者在账号页自助管理自己的 pack(改元数据、
+下架/恢复、删除、撤回投稿)。投稿不需要会 git/GitHub,注册只要一个邮箱。
 
 English: [README.md](README.md)。功能/技术/测试的方案文档见 [docs/](docs/)。
 
 ## 快速开始
 
 ```sh
-# 安装 pack(消费端)
+# 安装 pack(消费端):最新版,或钉版装历史版本
 node install.mjs task-card                # 装进 ./.docwright/packs/,重启宿主生效
+node install.mjs task-card@0.1.0          # 钉版
 
-# 投稿(作者)
+# 发布(作者):先设一次组织,再上传
+打开 https://dm.shrwk.com/account.html    # 密码、组织、我的 pack、投稿历史
 打开 https://dm.shrwk.com/submit.html     # 上传 .tgz,实时看校验报告
 
 # 审核(管理员)
@@ -60,5 +64,5 @@ npm devDependencies(vitest)仅开发期使用——运行时保持零依赖(veri
 ## 路线图(有意延后)
 
 公网加固(当前仅 frpc 路由)、同 API 的投稿 CLI、zip 上传、RLS 直读、
-functions.js 静态 API 扫描、tarball 长期版本归档。pack 创作本身属于
-docwright:领域中性的链 pack 进 docwright 仓库,市场只收部署侧 pack。
+functions.js 静态 API 扫描。pack 创作本身属于 docwright:领域中性的链 pack
+进 docwright 仓库,市场只收部署侧 pack。

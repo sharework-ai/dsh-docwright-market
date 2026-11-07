@@ -38,7 +38,7 @@
       const list = all.filter(p => {
         if (activeCategory && p.category !== activeCategory) return false
         if (!q) return true
-        const hay = [p.name, p.author, MB.localizedDesc(p.description)].join(' ').toLowerCase()
+        const hay = [p.name, p.author, p.org, MB.localizedDesc(p.description)].join(' ').toLowerCase()
         return hay.includes(q)
       })
       const grid = document.getElementById('packs')
@@ -49,6 +49,7 @@
           <div class="meta">
             <span class="chip">${MB.esc(p.category)}</span>
             <span class="chip">${MB.esc(p.author)}</span>
+            ${p.org ? `<span class="chip">org: ${MB.esc(p.org)}</span>` : ''}
             <span class="chip">${MB.esc(p.license)}</span>
             ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
           </div>

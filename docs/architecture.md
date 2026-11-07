@@ -71,31 +71,49 @@ checkout(而非在镜像内构建 harness):模块解析与宿主 `pack:check` �
 packs(name PK, version, description jsonb, category, author, author_id,
       license, homepage, consumes/languages jsonb, requires_topic,
       artifact_prefix, has_function_rules, content_hash,
-      tarball_path, tarball_sha256, added, updated)
+      tarball_path, tarball_sha256, org, status active|disabled,
+      added, updated)                      -- "最新版"投影,读面由此渲染
+
+pack_versions(name+version PK, name→packs on delete cascade, description,
+      content_hash, tarball_path, tarball_sha256, has_function_rules,
+      consumes/languages/requires_topic/artifact_prefix, submission_id,
+      published_at)                        -- 每次通过发布追加一行,全历史可下载
 
 submissions(id PK, pack_name, version, uploader→auth.users,
             status pending|approved|rejected, report jsonb, archive_path,
             category/author/license/homepage, review_note,
             reviewed_by, reviewed_at, created_at, UNIQUE(pack_name, version))
 
-profiles(id→auth.users PK, is_admin, display_name)
+profiles(id→auth.users PK on delete cascade, is_admin, display_name,
+         org, UNIQUE(org) where org is not null)
 ```
 
-表结构即合同:审核通过的表单字段在 approve 时搬进 packs;验证报告
-(checkOutput/manifest/contentHash)随 submission 留档,详情页的"体检单"
-即由此渲染。
+表结构即合同:审核通过的表单字段在 approve 时搬进 packs 并**同时追加
+pack_versions**;`status` 只在插入时取默认值 `active`、绝不进 update 集——
+这正是"下架期间发布新版本保持下架"的实现。删除 pack 时版本历史经外键级联
+消失,但 submissions 历史保留,(name, version) 由此永久保留。发布者组织在
+approve 时从投稿者当前 profile 盖章进 packs。
 
 ## API 面
 
 | 端点 | 说明 |
 |---|---|
-| `POST /api/submissions` | 投稿(multipart:archive + 表单字段),返回 id 与校验报告 |
+| `POST /api/submissions` | 投稿(multipart:archive + 表单字段);要求账号已设组织(403) |
 | `GET /api/submissions/{id}` | 作者/管理员查投稿状态与报告 |
-| `GET /api/packs`、`/api/packs/{name}` | 目录列表 / 详情(含体检单) |
-| `GET /api/index` | format:1 机器目录(install.mjs 与未来宿主消费) |
-| `GET /tarballs/{name}-{version}.tgz` | 下载(仅目录内已知路径;server 代理) |
+| `GET /api/account` | 当前账号:email/org/显示名/管理员标 |
+| `PUT /api/account/org` | 设置/修改发布者组织(单事务级联改名下全部 pack,返回 packsAffected) |
+| `GET /api/my/packs`、`/api/my/packs/{name}` | 属主视角:自己的全部 pack(含下架) |
+| `PATCH /api/my/packs/{name}` | 属主改元数据(category/license/homepage/author;homepage 显式 null 清空) |
+| `POST /api/my/packs/{name}/disable`、`…/enable` | 下架 / 恢复(下架期间下载 410) |
+| `DELETE /api/my/packs/{name}` | 硬删(目录 + 版本历史 + Storage 对象;submissions 保留) |
+| `GET /api/my/submissions` | 自己的投稿历史;`DELETE /api/my/submissions/{id}` 撤回待审投稿 |
+| `GET /api/packs`、`/api/packs/{name}` | 目录列表 / 详情(含体检单与版本历史);下架 pack 对外不可见 |
+| `GET /api/index` | format:2 机器目录(org + versions[];顶层字段仍指最新版,format:1 读者兼容) |
+| `GET /tarballs/{name}-{version}.tgz` | 下载(按 pack_versions.tarball_path 精确匹配;server 代理;下架 410) |
 | `GET /api/admin/queue`、`POST /api/admin/review/{id}` | 审核队列 / 通过·拒绝 |
 | `GET /config.json` | 浏览器引导:Supabase 公网地址 + publishable key |
 
-索引 `format: 1` 是版本化契约:tarball 为相对路径(经服务端路由),
-公网部署后历史数据不需要迁移。
+索引 `format: 2` 是版本化契约:相对路径(经服务端路由)+ org + versions[];
+顶层 per-pack 字段保持指向最新版,未钉版的安装行为与 format:1 完全一致。
+密码修改不走服务端:浏览器持会话令牌直调 GoTrue `PUT /auth/v1/user`
+(自托管 AUTOCONFIRM 无邮件依赖),符合"浏览器直接承担认证面"的既有边界。

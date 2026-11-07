@@ -51,6 +51,43 @@ window.MB = (() => {
       added: 'Added',
       updated: 'Updated',
       packNotFound: 'Pack not found.',
+      account: 'Account',
+      accountTitle: 'Your account',
+      orgGate: 'Set your publisher org before submitting — it takes one minute on the account page.',
+      accountHint: 'Password, publisher org, your packs and your submissions.',
+      passwordTitle: 'Change password',
+      currentPassword: 'Current password',
+      newPassword: 'New password (min 6)',
+      changePassword: 'Change password',
+      passwordChanged: 'Password changed. Please sign in again with the new password.',
+      orgTitle: 'Publisher org',
+      orgHint:
+        'A publisher org labels every pack you publish. It is required before submitting; changing it relabels all your packs at once.',
+      orgCurrent: 'Current org',
+      orgNone: 'No org yet — set one before submitting.',
+      orgNew: 'New org (lowercase kebab-case)',
+      orgSet: 'Set org',
+      orgChanged: (n) => `Org saved — ${n} pack(s) relabelled.`,
+      orgConfirm: (n) => `All ${n} of your pack(s) will be relabelled. Change now?`,
+      orgTaken: 'That org is already taken.',
+      orgInvalid: 'Org must be lowercase kebab-case (letters, digits, dashes), up to 39 chars, not reserved.',
+      myPacks: 'My packs',
+      mySubmissions: 'My submissions',
+      noPacksYet: 'No packs published yet.',
+      noSubmissions: 'No submissions yet.',
+      withdraw: 'Withdraw',
+      disable: 'Disable',
+      enable: 'Enable',
+      delete: 'Delete',
+      edit: 'Edit',
+      save: 'Save',
+      cancel: 'Cancel',
+      editMeta: 'Edit metadata',
+      deleteConfirmPrefix: 'Type the pack name to confirm deletion of',
+      deleteReservedNote: 'The name + every version number stay reserved forever; a re-registered pack must bump the version.',
+      versionsLabel: 'Versions',
+      publishedAt: 'Published',
+      disabledBadge: 'disabled',
     },
     zh: {
       browse: '浏览',
@@ -97,6 +134,42 @@ window.MB = (() => {
       added: '收录时间',
       updated: '更新时间',
       packNotFound: '找不到该 pack。',
+      account: '账号',
+      accountTitle: '我的账号',
+      orgGate: '投稿前请先设置发布者组织——去账号页一分钟搞定。',
+      accountHint: '密码、发布者组织、我的 pack 与投稿记录。',
+      passwordTitle: '修改密码',
+      currentPassword: '当前密码',
+      newPassword: '新密码(至少 6 位)',
+      changePassword: '修改密码',
+      passwordChanged: '密码已修改,请用新密码重新登录。',
+      orgTitle: '发布者组织',
+      orgHint: '组织标识你发布的所有 pack;投稿前必须设置,修改组织会一并更新你的全部 pack。',
+      orgCurrent: '当前组织',
+      orgNone: '尚未设置组织——投稿前请先设置。',
+      orgNew: '新组织(小写 kebab-case)',
+      orgSet: '保存组织',
+      orgChanged: (n) => `组织已保存——已同步更新 ${n} 个 pack。`,
+      orgConfirm: (n) => `你的全部 ${n} 个 pack 都将一并更新组织标识,确定修改?`,
+      orgTaken: '该组织名已被占用。',
+      orgInvalid: '组织只能是小写字母/数字/连字符,最长 39 字符,且不能用保留名。',
+      myPacks: '我的 pack',
+      mySubmissions: '我的投稿',
+      noPacksYet: '还没有已发布的 pack。',
+      noSubmissions: '还没有投稿记录。',
+      withdraw: '撤回',
+      disable: '下架',
+      enable: '恢复上架',
+      delete: '删除',
+      edit: '编辑',
+      save: '保存',
+      cancel: '取消',
+      editMeta: '编辑元数据',
+      deleteConfirmPrefix: '输入 pack 名以确认删除',
+      deleteReservedNote: '名字与所有版本号将永久保留;同名重注册必须提升版本号。',
+      versionsLabel: '版本历史',
+      publishedAt: '发布时间',
+      disabledBadge: '已下架',
     },
   }
 
@@ -159,6 +232,7 @@ window.MB = (() => {
       <nav>
         <a href="/" data-i18n="browse"></a>
         <a href="/submit.html" data-i18n="submit"></a>
+        <a href="/account.html" data-i18n="account"></a>
         <a href="/admin.html" data-i18n="admin"></a>
         <span class="spacer"></span>
         <span id="auth-slot"></span>
@@ -175,7 +249,7 @@ window.MB = (() => {
     if (!slot) return
     const s = await session().catch(() => null)
     if (s) {
-      slot.innerHTML = `<span class="muted">${s.user.email}</span> <a href="#" id="logout-a" data-i18n="logout"></a>`
+      slot.innerHTML = `<span class="muted">${s.user.email}</span> <a href="/account.html" data-i18n="account"></a> <a href="#" id="logout-a" data-i18n="logout"></a>`
       slot.querySelector('#logout-a').addEventListener('click', async e => {
         e.preventDefault()
         await supabase.auth.signOut()

@@ -42,7 +42,7 @@ fi
 
 load_admin_tools
 ensure_services || exit 1
-trap stop_services EXIT
+trap 'teardown_accounts; stop_services' EXIT
 
 PASSED=()
 # Run selected scenarios; one failure never masks the rest.

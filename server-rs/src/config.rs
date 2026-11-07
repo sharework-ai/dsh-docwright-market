@@ -82,5 +82,20 @@ impl Config {
 
 pub const CATEGORY_WHITELIST: [&str; 6] = ["estimation", "dev", "pm", "test", "docs", "other"];
 pub const LICENSE_WHITELIST: [&str; 5] = ["MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC"];
+/// Publisher orgs that are refused as a slug (product/project identity, not a
+/// tunable — deliberately a code constant, not an env var).
+pub const ORG_RESERVED: [&str; 7] = ["admin", "api", "cosmic", "docwright", "dsh", "market", "www"];
 /// Same cap as the verifier's VERIFIER_MAX_BYTES default.
 pub const MAX_ARCHIVE_BYTES: usize = 50 * 1024 * 1024;
+
+/// A valid org slug: lowercase kebab-case, ≤ 39 chars (npm-scope style).
+pub fn valid_org_slug(org: &str) -> bool {
+    if org.is_empty() || org.len() > 39 || ORG_RESERVED.contains(&org) {
+        return false;
+    }
+    let head_ok = org.as_bytes()[0].is_ascii_lowercase() || org.as_bytes()[0].is_ascii_digit();
+    let body_ok = org
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    head_ok && body_ok
+}
