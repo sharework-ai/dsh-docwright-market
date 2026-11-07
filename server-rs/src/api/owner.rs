@@ -6,13 +6,14 @@ use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
+use axum::response::IntoResponse;
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-use crate::auth::{require_user, AuthUser};
+use crate::auth::{require_admin, require_user, AuthUser};
 use crate::config::{CATEGORY_WHITELIST, LICENSE_WHITELIST};
 use crate::error::AppError;
 use crate::state::AppState;
@@ -271,6 +272,41 @@ pub async fn delete_pack(
         "deletedVersions": paths.len(),
         "storageWarnings": storage_warnings,
     })))
+}
+
+/// GET /api/my/submissions/{id}/archive — download the raw archive behind a
+/// submission (owner; admins may inspect too). Works for every status: a
+/// pending or rejected submission is the author's own upload, and for deleted
+/// packs this uploads bucket copy is the only one left (pack deletion removes
+/// the public tarballs, never the submission archives).
+pub async fn submission_archive(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<axum::response::Response, AppError> {
+    let user = require_user(&state, &headers).await?;
+    let row: Option<(Uuid, String, String, String, Option<String>)> = sqlx::query_as(
+        "select uploader, status, pack_name, version, archive_path from submissions where id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?;
+    let (uploader, _status, pack_name, version, archive_path) =
+        row.ok_or_else(|| AppError::not_found("no such submission"))?;
+    if uploader != user.id {
+        require_admin(&state, &headers).await?;
+    }
+    let path = archive_path
+        .ok_or_else(|| AppError::not_found("submission has no archived archive"))?;
+    let bytes = storage::download(&state, storage::BUCKET_UPLOADS, &path).await?;
+    let filename = format!("{pack_name}-{version}.tgz");
+    let mut hdrs = axum::http::HeaderMap::new();
+    hdrs.insert(axum::http::header::CONTENT_TYPE, "application/gzip".parse().unwrap());
+    hdrs.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"{filename}\"").parse().unwrap(),
+    );
+    Ok((hdrs, axum::body::Body::from(bytes)).into_response())
 }
 
 /// GET /api/my/submissions — the caller's submission history, newest first.

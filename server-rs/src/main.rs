@@ -81,6 +81,7 @@ pub(crate) fn build_router(state: Arc<AppState>, web_dir: &str) -> Router {
         .route("/api/my/packs/{name}/enable", post(api::owner::enable_pack))
         .route("/api/my/submissions", get(api::owner::my_submissions))
         .route("/api/my/submissions/{id}", delete(api::owner::withdraw_submission))
+        .route("/api/my/submissions/{id}/archive", get(api::owner::submission_archive))
         .route("/api/submissions", post(api::submissions::submit))
         .route("/api/submissions/{id}", get(api::submissions::get_submission))
         .route("/api/packs", get(api::packs::list))

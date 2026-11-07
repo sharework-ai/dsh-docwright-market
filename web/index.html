@@ -54,6 +54,7 @@
             <span class="chip">${MB.esc(p.author)}</span>
             ${p.org ? `<span class="chip">org: ${MB.esc(p.org)}</span>` : ''}
             <span class="chip">${MB.esc(p.license)}</span>
+            <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
             ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
           </div>
         </div>`).join('')

@@ -802,3 +802,54 @@ async fn my_submissions_lists_the_callers_history(pool: PgPool) {
     assert!(subs.iter().all(|s| s["packName"] != "c-pack"));
 }
 
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn submission_archive_is_owner_or_admin_only(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    let stranger = Uuid::new_v4();
+    let admin = Uuid::new_v4();
+    for id in [author, stranger, admin] {
+        seed_user(&pool, id).await;
+    }
+    sqlx::query("insert into profiles (id, is_admin) values ($1, true)")
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let sub_id = Uuid::new_v4();
+    seed_submission(&pool, sub_id, "arch-pack", "0.3.0", author, "approved").await;
+    sqlx::query("update submissions set archive_path = 'arch.tgz' where id = $1")
+        .bind(sub_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (supabase, verifier) = start_mocks(author, admin, stranger, true).await;
+    let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
+
+    // The owner gets the raw archive back as an attachment.
+    let hit = json_request(&app, "GET", &format!("/api/my/submissions/{sub_id}/archive"), TOK_AUTHOR, "").await;
+    assert_eq!(hit.status(), StatusCode::OK);
+    assert_eq!(
+        hit.headers()["content-disposition"],
+        "attachment; filename=\"arch-pack-0.3.0.tgz\""
+    );
+    let bytes = axum::body::to_bytes(hit.into_body(), 1 << 20).await.unwrap();
+    assert_eq!(&bytes[..], b"fake archive bytes");
+
+    // Strangers learn nothing; admins may inspect.
+    let miss = json_request(&app, "GET", &format!("/api/my/submissions/{sub_id}/archive"), TOK_STRANGER, "").await;
+    assert_eq!(miss.status(), StatusCode::FORBIDDEN);
+    let admin_hit = tower::ServiceExt::oneshot(
+        app,
+        Request::builder()
+            .uri(format!("/api/my/submissions/{sub_id}/archive"))
+            .header("authorization", format!("Bearer {TOK_ADMIN}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(admin_hit.status(), StatusCode::OK);
+}
+

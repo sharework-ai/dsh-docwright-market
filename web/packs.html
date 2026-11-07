@@ -105,7 +105,9 @@
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
             ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
           </h3>
-          <div class="meta">${chipEl(p.category)}${chipEl(p.author)}${chipEl(p.license)}${p.org ? chipEl('org: ' + p.org) : ''}</div>
+          <div class="meta">${chipEl(p.category)}${chipEl(p.author)}${chipEl(p.license)}${p.org ? chipEl('org: ' + p.org) : ''}
+            <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
+          </div>
           <div class="meta">
             <button class="secondary" data-act="edit">${MB.t('edit')}</button>
             <button class="secondary" data-act="${p.status === 'disabled' ? 'enable' : 'disable'}">
@@ -175,6 +177,23 @@
     }
 
     // ---- my submissions ----------------------------------------------------------
+    // The archive endpoint needs the bearer header, so an anchor's plain href
+    // can't carry it — fetch bytes, then hand them to the browser as a file.
+    async function downloadArchive(id, name, version) {
+      const s = await MB.session()
+      if (!s) return
+      const res = await fetch(`/api/my/submissions/${id}/archive`, {
+        headers: { Authorization: `Bearer ${s.access_token}` },
+      })
+      if (!res.ok) { alert(`download failed: ${res.status}`); return }
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${name}-${version}.tgz`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    }
+
     async function loadMySubmissions() {
       const { submissions } = await MB.api('/api/my/submissions', { auth: true })
       document.getElementById('my-subs-empty').classList.toggle('hidden', submissions.length > 0)
@@ -184,11 +203,18 @@
           <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
           ${statusChip(s.status)}
           <span class="muted" style="font-size:0.8rem">${MB.esc(s.createdAt)}</span>
+          <a class="chip" href="#" data-arch="${s.id}" data-name="${MB.esc(s.packName)}" data-version="${MB.esc(s.version)}" title="download submitted archive">↓ tgz</a>
           ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
           ${s.status === 'pending'
             ? `<div class="meta"><button class="danger" data-withdraw="${s.id}">${MB.t('withdraw')}</button></div>`
             : ''}
         </div>`).join('')
+      box.querySelectorAll('a[data-arch]').forEach(a => {
+        a.addEventListener('click', e => {
+          e.preventDefault()
+          downloadArchive(a.dataset.arch, a.dataset.name, a.dataset.version)
+        })
+      })
       box.querySelectorAll('button[data-withdraw]').forEach(btn => {
         btn.addEventListener('click', async () => {
           try {
