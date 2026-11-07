@@ -24,7 +24,7 @@ aliyun DNS → t2 frps(SNI 分流)→ frpc(`dm-web-macus` / `sb-web-macus`
 # 1. schema 迁移先行(新 server + 旧库才是不行的组合;旧 server + 新库无碍)
 ~/projects/commons/supabase/setup.sh apply-migration supabase/migrations/0002_org_versions.sql
 # 2. 镜像 + 部署
-deploy/build.sh                 # 组装 context + podman build 两镜像 + 导入 k3s
+deploy/build.sh                 # 组装 context + podman build 镜像 + 导入 k3s
 deploy/deploy.sh --tag <tag>    # ns/secret(幂等)+ apply + rollout 等待
 ```
 

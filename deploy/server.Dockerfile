@@ -11,13 +11,14 @@ FROM ${BASE_IMAGE} AS build
 USER root
 COPY server-rs /build/server-rs
 WORKDIR /build/server-rs
-# /build/target is volume-mounted by build.sh (persistent incremental cache);
-# --offline keeps the build honest about the registry cache: a missing crate
-# fails loud instead of silently reaching the network. 8 parallel rustc units
-# keep the memory footprint sane on the 20G dev machine.
+# /build/target is volume-mounted by build.sh (persistent incremental cache).
+# Cargo reads the mounted registry cache first and only reaches the network
+# for crates it is missing — no --offline here on purpose: a builder without
+# a warm cache must still work. 8 parallel rustc units keep the memory
+# footprint sane on the 20G dev machine.
 ENV CARGO_TARGET_DIR=/build/target \
     CARGO_BUILD_JOBS=8
-RUN cargo build --release --offline
+RUN cargo build --release
 
 FROM ${RUNTIME_IMAGE}
 COPY --from=build /build/target/release/docwright-market /app/docwright-market
