@@ -16,14 +16,17 @@
       <span lang="zh">docwright 的场景 pack 市场:生成 prompt、JSON Schema、校验规则与模板;
       机器校验(<code>pack:check</code> 全绿)+ 人工审核,装进你的 <code>packsDir</code> 即用。</span>
     </p>
+
     <input id="search" class="search" data-i18n-ph="searchHint">
     <div id="chips" class="chips"></div>
     <div id="packs" class="grid"></div>
     <p id="empty" class="muted hidden" data-i18n="noPacks"></p>
+    <p id="signin-hint" class="muted hidden" data-i18n="signInToPublish"></p>
   </main>
   <footer class="site">
     <span>
-      Install: <code>node install.mjs &lt;pack-name&gt;</code> —
+      Install: <code>node install.mjs &lt;pack-name&gt;</code> (pin a version with
+      <code>name@x.y.z</code>) —
       <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>
     </span>
   </footer>
@@ -77,6 +80,10 @@
       render()
     })
     document.getElementById('search').addEventListener('input', render)
+    // Publish discoverability for signed-out visitors.
+    MB.session().then(s => {
+      if (!s) document.getElementById('signin-hint').classList.remove('hidden')
+    })
   </script>
 </body>
 </html>

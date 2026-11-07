@@ -36,32 +36,12 @@
         <div id="org-msg"></div>
         <button id="btn-org" class="primary" data-i18n="orgSet"></button>
       </section>
-
-      <section class="block">
-        <h3 data-i18n="myPacks"></h3>
-        <p id="my-packs-empty" class="muted hidden" data-i18n="noPacksYet"></p>
-        <div id="my-packs"></div>
-      </section>
-
-      <section class="block">
-        <h3 data-i18n="mySubmissions"></h3>
-        <p id="my-subs-empty" class="muted hidden" data-i18n="noSubmissions"></p>
-        <div id="my-subs"></div>
-      </section>
     </div>
   </main>
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
   <script>
     MB.header('account')
-
-    const CATEGORY_WHITELIST = ['estimation', 'dev', 'pm', 'test', 'docs', 'other']
-    const LICENSE_WHITELIST = ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC']
-
-    function chip(text) { return `<span class="chip">${MB.esc(text)}</span>` }
-    function statusChip(status) {
-      return `<span class="chip ${status === 'disabled' ? 'badge code' : ''}">${MB.esc(status)}</span>`
-    }
 
     // ---- auth gate (same pattern as submit.html) ------------------------------
     function readCreds() {
@@ -153,116 +133,11 @@
         const res = await MB.api('/api/account/org', { method: 'PUT', body: { org }, auth: true })
         msg.innerHTML = `<div class="notice ok">${MB.t('orgChanged')(res.packsAffected)}</div>`
         await loadOrg()
-        await loadMyPacks()
       } catch (e) {
         const text = /already taken/.test(e.message) ? MB.t('orgTaken') : e.message
         msg.innerHTML = `<div class="notice bad">${MB.esc(text)}</div>`
       }
     })
-
-    // ---- my packs ---------------------------------------------------------------
-    async function loadMyPacks() {
-      const { packs } = await MB.api('/api/my/packs', { auth: true })
-      const box = document.getElementById('my-packs')
-      document.getElementById('my-packs-empty').classList.toggle('hidden', packs.length > 0)
-      box.innerHTML = packs.map(p => `
-        <div class="card" style="margin-bottom:0.8rem" data-pack="${MB.esc(p.name)}">
-          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
-            ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
-          </h3>
-          <div class="meta">${chip(p.category)}${chip(p.author)}${chip(p.license)}${p.org ? chip('org: ' + p.org) : ''}</div>
-          <div class="meta">
-            <button class="secondary" data-act="edit">${MB.t('edit')}</button>
-            <button class="secondary" data-act="${p.status === 'disabled' ? 'enable' : 'disable'}">
-              ${MB.t(p.status === 'disabled' ? 'enable' : 'disable')}
-            </button>
-            <button class="danger" data-act="delete">${MB.t('delete')}</button>
-          </div>
-          <div class="edit-area"></div>
-        </div>`).join('')
-
-      box.querySelectorAll('[data-pack]').forEach(card => {
-        const name = card.dataset.pack
-        card.querySelectorAll('button[data-act]').forEach(btn => {
-          btn.addEventListener('click', async () => {
-            const act = btn.dataset.act
-            if (act === 'edit') return renderEditForm(card, name, packs.find(p => p.name === name))
-            if (act === 'disable' || act === 'enable') {
-              await MB.api(`/api/my/packs/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
-              await loadMyPacks()
-              return
-            }
-            if (act === 'delete') {
-              const typed = prompt(`${MB.t('deleteConfirmPrefix')} "${name}"\n${MB.t('deleteReservedNote')}`)
-              if (typed !== name) return
-              await MB.api(`/api/my/packs/${encodeURIComponent(name)}`, { method: 'DELETE', auth: true })
-              await loadMyPacks()
-            }
-          })
-        })
-      })
-    }
-
-    function renderEditForm(card, name, p) {
-      const area = card.querySelector('.edit-area')
-      if (area.innerHTML) { area.innerHTML = ''; return }
-      const opt = (list, selected) => list.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('')
-      area.innerHTML = `
-        <div class="card" style="background:var(--bg); margin-top:0.6rem">
-          <strong style="font-size:0.85rem">${MB.t('editMeta')}</strong>
-          <label class="field"><span>${MB.t('category')}</span><select class="e-category">${opt(CATEGORY_WHITELIST, p.category)}</select></label>
-          <label class="field"><span>${MB.t('license')}</span><select class="e-license">${opt(LICENSE_WHITELIST, p.license)}</select></label>
-          <label class="field"><span>${MB.t('author')}</span><input class="e-author" value="${MB.esc(p.author)}"></label>
-          <label class="field"><span>${MB.t('homepage')}</span><input class="e-homepage" type="url" placeholder="https://…" value="${MB.esc(p.homepage ?? '')}"></label>
-          <div class="e-msg"></div>
-          <button class="primary e-save">${MB.t('save')}</button>
-          <button class="secondary e-cancel">${MB.t('cancel')}</button>
-        </div>`
-      area.querySelector('.e-cancel').addEventListener('click', () => { area.innerHTML = '' })
-      area.querySelector('.e-save').addEventListener('click', async () => {
-        const msg = area.querySelector('.e-msg')
-        const homepage = area.querySelector('.e-homepage').value.trim()
-        const body = {
-          category: area.querySelector('.e-category').value,
-          license: area.querySelector('.e-license').value,
-          author: area.querySelector('.e-author').value,
-          homepage: homepage === '' ? null : homepage,
-        }
-        try {
-          await MB.api(`/api/my/packs/${encodeURIComponent(name)}`, { method: 'PATCH', body, auth: true })
-          await loadMyPacks()
-        } catch (e) {
-          msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
-        }
-      })
-    }
-
-    // ---- my submissions ----------------------------------------------------------
-    async function loadMySubmissions() {
-      const { submissions } = await MB.api('/api/my/submissions', { auth: true })
-      const box = document.getElementById('my-subs')
-      document.getElementById('my-subs-empty').classList.toggle('hidden', submissions.length > 0)
-      box.innerHTML = submissions.map(s => `
-        <div class="card" style="margin-bottom:0.6rem">
-          <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
-          ${statusChip(s.status)}
-          <span class="muted" style="font-size:0.8rem">${MB.esc(s.createdAt)}</span>
-          ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
-          ${s.status === 'pending'
-            ? `<div class="meta"><button class="danger" data-withdraw="${s.id}">${MB.t('withdraw')}</button></div>`
-            : ''}
-        </div>`).join('')
-      box.querySelectorAll('button[data-withdraw]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          try {
-            await MB.api(`/api/my/submissions/${btn.dataset.withdraw}`, { method: 'DELETE', auth: true })
-            await loadMySubmissions()
-          } catch (e) {
-            alert(e.message)
-          }
-        })
-      })
-    }
 
     async function maybeShowContent() {
       const s = await MB.session()
@@ -270,8 +145,6 @@
       document.getElementById('content').classList.toggle('hidden', !s)
       if (!s) return
       await loadOrg().catch(() => {})
-      await loadMyPacks().catch(() => {})
-      await loadMySubmissions().catch(() => {})
     }
 
     maybeShowContent()

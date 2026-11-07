@@ -112,3 +112,6 @@ label.field input, label.field select {
 .muted { color: var(--muted); }
 section.block { margin: 1.4rem 0; }
 footer.site { text-align: center; color: var(--muted); font-size: 0.82rem; padding: 1.5rem; }
+.auth-email { font-weight: 600; }
+a.btn { display: inline-block; background: var(--accent); color: var(--accent-ink); border-radius: 8px; padding: 0.4rem 1rem; text-decoration: none; font-size: 0.92rem; }
+a.btn.secondary { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }

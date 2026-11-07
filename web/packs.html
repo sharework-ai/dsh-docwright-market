@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Packs — docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <h1 data-i18n="packs"></h1>
+
+    <div id="auth-box" class="card">
+      <p class="muted" data-i18n="signInToPublish"></p>
+      <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <div id="auth-error"></div>
+      <button id="btn-signin" class="primary" data-i18n="signIn"></button>
+      <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
+    </div>
+
+    <div id="content" class="hidden">
+      <!-- org is read-only here; editing lives on the account page. -->
+      <div class="card" style="margin-bottom:1rem">
+        <div class="meta" style="margin-top:0">
+          <span id="hub-org"></span>
+          <a href="/account.html" class="chip" data-i18n="orgEditHint"></a>
+          <span style="flex:1"></span>
+          <a href="/submit.html" class="btn" data-i18n="submit"></a>
+        </div>
+      </div>
+
+      <section class="block">
+        <h2 data-i18n="myPacks"></h2>
+        <p id="my-packs-empty" class="muted hidden" data-i18n="noPacksYet"></p>
+        <div id="my-packs"></div>
+      </section>
+
+      <section class="block">
+        <h2 data-i18n="mySubmissions"></h2>
+        <p id="my-subs-empty" class="muted hidden" data-i18n="noSubmissions"></p>
+        <div id="my-subs"></div>
+      </section>
+    </div>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    MB.header('packs')
+
+    // ---- auth gate ----------------------------------------------------------
+    function readCreds() {
+      const email = document.getElementById('email').value.trim()
+      const password = document.getElementById('password').value
+      const box = document.getElementById('auth-error')
+      if (!email || !password) {
+        box.innerHTML = '<div class="notice bad">请先填写邮箱和密码 / fill in email and password first</div>'
+        return null
+      }
+      box.innerHTML = ''
+      return { email, password }
+    }
+
+    document.getElementById('btn-signin').addEventListener('click', async () => {
+      const creds = readCreds()
+      if (!creds) return
+      const { error } = await MB.supabase.auth.signInWithPassword(creds)
+      if (error) alert(error.message)
+      else location.reload()
+    })
+
+    document.getElementById('btn-signup').addEventListener('click', async () => {
+      const creds = readCreds()
+      if (!creds) return
+      if (creds.password.length < 6) {
+        document.getElementById('auth-error').innerHTML =
+          '<div class="notice bad">密码至少 6 位 / password needs at least 6 characters</div>'
+        return
+      }
+      const { error } = await MB.supabase.auth.signUp(creds)
+      if (error) alert(error.message)
+      else location.reload()
+    })
+
+    // ---- org read-only display ------------------------------------------------
+    async function loadHub() {
+      const acc = await MB.api('/api/account', { auth: true })
+      document.getElementById('hub-org').innerHTML = acc.org
+        ? `<span class="chip">org: ${MB.esc(acc.org)}</span>`
+        : `<span class="notice info" style="display:inline-block;padding:0.2rem 0.8rem">${MB.t('orgNone')}</span>`
+    }
+
+    // ---- my packs -------------------------------------------------------------
+    function chipEl(text) { return `<span class="chip">${MB.esc(text)}</span>` }
+    function statusChip(status) {
+      return `<span class="chip ${status === 'disabled' ? 'badge code' : ''}">${MB.esc(status)}</span>`
+    }
+
+    async function loadMyPacks() {
+      const { packs } = await MB.api('/api/my/packs', { auth: true })
+      document.getElementById('my-packs-empty').classList.toggle('hidden', packs.length > 0)
+      const box = document.getElementById('my-packs')
+      box.innerHTML = packs.map(p => `
+        <div class="card" style="margin-bottom:0.8rem" data-pack="${MB.esc(p.name)}">
+          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
+            ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
+          </h3>
+          <div class="meta">${chipEl(p.category)}${chipEl(p.author)}${chipEl(p.license)}${p.org ? chipEl('org: ' + p.org) : ''}</div>
+          <div class="meta">
+            <button class="secondary" data-act="edit">${MB.t('edit')}</button>
+            <button class="secondary" data-act="${p.status === 'disabled' ? 'enable' : 'disable'}">
+              ${MB.t(p.status === 'disabled' ? 'enable' : 'disable')}
+            </button>
+            <button class="danger" data-act="delete">${MB.t('delete')}</button>
+          </div>
+          <div class="edit-area"></div>
+        </div>`).join('')
+
+      box.querySelectorAll('[data-pack]').forEach(card => {
+        const name = card.dataset.pack
+        card.querySelectorAll('button[data-act]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const act = btn.dataset.act
+            if (act === 'edit') return renderEditForm(card, name, packs.find(p => p.name === name))
+            if (act === 'disable' || act === 'enable') {
+              await MB.api(`/api/my/packs/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
+              await loadMyPacks()
+              return
+            }
+            if (act === 'delete') {
+              const typed = prompt(`${MB.t('deleteConfirmPrefix')} "${name}"\n${MB.t('deleteReservedNote')}`)
+              if (typed !== name) return
+              await MB.api(`/api/my/packs/${encodeURIComponent(name)}`, { method: 'DELETE', auth: true })
+              await loadMyPacks()
+            }
+          })
+        })
+      })
+    }
+
+    function renderEditForm(card, name, p) {
+      const area = card.querySelector('.edit-area')
+      if (area.innerHTML) { area.innerHTML = ''; return }
+      const CATEGORY_WHITELIST = ['estimation', 'dev', 'pm', 'test', 'docs', 'other']
+      const LICENSE_WHITELIST = ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC']
+      const opt = (list, selected) => list.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('')
+      area.innerHTML = `
+        <div class="card" style="background:var(--bg); margin-top:0.6rem">
+          <strong style="font-size:0.85rem">${MB.t('editMeta')}</strong>
+          <label class="field"><span>${MB.t('category')}</span><select class="e-category">${opt(CATEGORY_WHITELIST, p.category)}</select></label>
+          <label class="field"><span>${MB.t('license')}</span><select class="e-license">${opt(LICENSE_WHITELIST, p.license)}</select></label>
+          <label class="field"><span>${MB.t('author')}</span><input class="e-author" value="${MB.esc(p.author)}"></label>
+          <label class="field"><span>${MB.t('homepage')}</span><input class="e-homepage" type="url" placeholder="https://…" value="${MB.esc(p.homepage ?? '')}"></label>
+          <div class="e-msg"></div>
+          <button class="primary e-save">${MB.t('save')}</button>
+          <button class="secondary e-cancel">${MB.t('cancel')}</button>
+        </div>`
+      area.querySelector('.e-cancel').addEventListener('click', () => { area.innerHTML = '' })
+      area.querySelector('.e-save').addEventListener('click', async () => {
+        const msg = area.querySelector('.e-msg')
+        const homepage = area.querySelector('.e-homepage').value.trim()
+        const body = {
+          category: area.querySelector('.e-category').value,
+          license: area.querySelector('.e-license').value,
+          author: area.querySelector('.e-author').value,
+          homepage: homepage === '' ? null : homepage,
+        }
+        try {
+          await MB.api(`/api/my/packs/${encodeURIComponent(name)}`, { method: 'PATCH', body, auth: true })
+          await loadMyPacks()
+        } catch (e) {
+          msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+        }
+      })
+    }
+
+    // ---- my submissions ----------------------------------------------------------
+    async function loadMySubmissions() {
+      const { submissions } = await MB.api('/api/my/submissions', { auth: true })
+      document.getElementById('my-subs-empty').classList.toggle('hidden', submissions.length > 0)
+      const box = document.getElementById('my-subs')
+      box.innerHTML = submissions.map(s => `
+        <div class="card" style="margin-bottom:0.6rem">
+          <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
+          ${statusChip(s.status)}
+          <span class="muted" style="font-size:0.8rem">${MB.esc(s.createdAt)}</span>
+          ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
+          ${s.status === 'pending'
+            ? `<div class="meta"><button class="danger" data-withdraw="${s.id}">${MB.t('withdraw')}</button></div>`
+            : ''}
+        </div>`).join('')
+      box.querySelectorAll('button[data-withdraw]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await MB.api(`/api/my/submissions/${btn.dataset.withdraw}`, { method: 'DELETE', auth: true })
+            await loadMySubmissions()
+          } catch (e) {
+            alert(e.message)
+          }
+        })
+      })
+    }
+
+    async function maybeShowContent() {
+      const s = await MB.session()
+      document.getElementById('auth-box').classList.toggle('hidden', !!s)
+      document.getElementById('content').classList.toggle('hidden', !s)
+      if (!s) return
+      await loadHub().catch(() => {})
+      await loadMyPacks().catch(() => {})
+      await loadMySubmissions().catch(() => {})
+    }
+
+    maybeShowContent()
+  </script>
+</body>
+</html>

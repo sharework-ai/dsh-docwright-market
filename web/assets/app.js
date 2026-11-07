@@ -6,7 +6,8 @@ window.MB = (() => {
 
   const I18N = {
     en: {
-      browse: 'Browse',
+      browse: 'Market',
+      packs: 'Packs',
       submit: 'Submit a pack',
       admin: 'Review',
       login: 'Sign in',
@@ -54,7 +55,9 @@ window.MB = (() => {
       account: 'Account',
       accountTitle: 'Your account',
       orgGate: 'Set your publisher org before submitting — it takes one minute on the account page.',
-      accountHint: 'Password, publisher org, your packs and your submissions.',
+      orgEditHint: 'Edit org on the account page',
+      signInToPublish: 'Sign in to publish your own packs.',
+      accountHint: 'Password and publisher org settings. Your packs and submissions live on the Packs page.',
       passwordTitle: 'Change password',
       currentPassword: 'Current password',
       newPassword: 'New password (min 6)',
@@ -90,7 +93,8 @@ window.MB = (() => {
       disabledBadge: 'disabled',
     },
     zh: {
-      browse: '浏览',
+      browse: '市场',
+      packs: '我的 Packs',
       submit: '投稿 pack',
       admin: '审核',
       login: '登录',
@@ -137,7 +141,9 @@ window.MB = (() => {
       account: '账号',
       accountTitle: '我的账号',
       orgGate: '投稿前请先设置发布者组织——去账号页一分钟搞定。',
-      accountHint: '密码、发布者组织、我的 pack 与投稿记录。',
+      orgEditHint: '到账号页编辑组织',
+      signInToPublish: '登录后可以发布和管理自己的 pack。',
+      accountHint: '密码与发布者组织设置;你的 pack 与投稿管理在 Packs 页面。',
       passwordTitle: '修改密码',
       currentPassword: '当前密码',
       newPassword: '新密码(至少 6 位)',
@@ -224,16 +230,15 @@ window.MB = (() => {
     return json
   }
 
-  function header(active) {
+  function header() {
     const el = document.createElement('header')
     el.className = 'site'
     el.innerHTML = `
       <a class="brand" href="/">docwright pack market</a>
       <nav>
         <a href="/" data-i18n="browse"></a>
-        <a href="/submit.html" data-i18n="submit"></a>
-        <a href="/account.html" data-i18n="account"></a>
-        <a href="/admin.html" data-i18n="admin"></a>
+        <a href="/packs.html" data-i18n="packs" class="hidden" id="nav-packs"></a>
+        <a href="/admin.html" data-i18n="admin" class="hidden" id="nav-admin"></a>
         <span class="spacer"></span>
         <span id="auth-slot"></span>
         <button id="lang-btn" class="lang-btn" title="switch language"></button>
@@ -241,25 +246,31 @@ window.MB = (() => {
     document.body.prepend(el)
     el.querySelector('#lang-btn').addEventListener('click', () => setLang(lang() === 'zh' ? 'en' : 'zh'))
     applyI18n()
-    refreshAuthSlot(active)
+    refreshAuthSlot()
   }
 
-  async function refreshAuthSlot(active) {
+  async function refreshAuthSlot() {
     const slot = document.getElementById('auth-slot')
     if (!slot) return
     const s = await session().catch(() => null)
-    if (s) {
-      slot.innerHTML = `<span class="muted">${s.user.email}</span> <a href="/account.html" data-i18n="account"></a> <a href="#" id="logout-a" data-i18n="logout"></a>`
-      slot.querySelector('#logout-a').addEventListener('click', async e => {
-        e.preventDefault()
-        await supabase.auth.signOut()
-        location.reload()
-      })
+    if (!s) {
+      slot.innerHTML = `<a href="/account.html" data-i18n="login"></a>`
       applyI18n()
-    } else {
-      slot.innerHTML = `<a href="${active === 'submit' ? '#' : '/submit.html'}" data-i18n="login"></a>`
-      applyI18n()
+      return
     }
+    // The email itself is the account entry point.
+    slot.innerHTML = `<a href="/account.html" class="auth-email">${esc(s.user.email)}</a> <a href="#" id="logout-a" data-i18n="logout"></a>`
+    slot.querySelector('#logout-a').addEventListener('click', async e => {
+      e.preventDefault()
+      await supabase.auth.signOut()
+      location.reload()
+    })
+    applyI18n()
+    // Personal nav surfaces only for the signed-in: Packs for everyone,
+    // Review for admins only.
+    document.getElementById('nav-packs')?.classList.remove('hidden')
+    const acc = await api('/api/account', { auth: true }).catch(() => null)
+    if (acc?.isAdmin) document.getElementById('nav-admin')?.classList.remove('hidden')
   }
 
   function localizedDesc(description) {
