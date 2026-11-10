@@ -31,6 +31,9 @@ schema `market_dev`**(登录角色 `market_dev` 的 role-level search_path,
 Auth **共享** GoTrue(sb.shrwk.com 同一登录);profiles 按 schema 隔离,
 deploy-dev.sh 每次从 public.profiles 同步管理员。资源:server limit
 100Mi + verifier limit 256Mi(仅 pack:check 突发),稳态合计 <100Mi。
+生产与 dev 跑**同一镜像构建**(2026-11-10 起均为桶名 env 化版本,如
+prod-20261110-1 / dev-20261110-1),环境差异只在 env——生产 secret 不设
+这两个变量,行为与旧版完全一致。
 
 ```sh
 deploy/build.sh --tag dev-$(date +%m%d-%H%M)   # 镜像与生产同一份(dev 只差 env)
