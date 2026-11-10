@@ -1,6 +1,11 @@
 //! Supabase Storage REST access with the server-side secret key.
 //! Buckets: `uploads` (private, raw submission archive) and `tarballs`
-//! (public read, install-time downloads) — created by the market migration.
+//! (public read, install-time downloads) — created by the market migration
+//! (or ensured idempotently at boot). A parallel deployment (dev market on a
+//! second schema) renames its buckets via UPLOADS_BUCKET / TARBALLS_BUCKET so
+//! dev and production never share stored artifacts.
+
+use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
 
@@ -9,6 +14,26 @@ use crate::state::AppState;
 
 pub const BUCKET_UPLOADS: &str = "uploads";
 pub const BUCKET_TARBALLS: &str = "tarballs";
+
+static UPLOADS_BUCKET: OnceLock<String> = OnceLock::new();
+static TARBALLS_BUCKET: OnceLock<String> = OnceLock::new();
+
+fn env_bucket(env_name: &str, default: &str) -> String {
+    match std::env::var(env_name) {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => default.to_string(),
+    }
+}
+
+/// Effective uploads bucket name (env UPLOADS_BUCKET, default `uploads`).
+pub fn bucket_uploads() -> &'static str {
+    UPLOADS_BUCKET.get_or_init(|| env_bucket("UPLOADS_BUCKET", BUCKET_UPLOADS))
+}
+
+/// Effective tarballs bucket name (env TARBALLS_BUCKET, default `tarballs`).
+pub fn bucket_tarballs() -> &'static str {
+    TARBALLS_BUCKET.get_or_init(|| env_bucket("TARBALLS_BUCKET", BUCKET_TARBALLS))
+}
 
 pub async fn upload(
     state: &AppState,
@@ -120,7 +145,7 @@ pub async fn delete(
 pub fn public_url(state: &AppState, object_path: &str) -> String {
     format!(
         "{}/storage/v1/object/public/{}/{}",
-        state.cfg.supabase_api_url, BUCKET_TARBALLS, object_path
+        state.cfg.supabase_api_url, bucket_tarballs(), object_path
     )
 }
 
@@ -136,7 +161,7 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 /// Storage API, not plain SQL — plain-Postgres test databases have no
 /// storage schema). "Already exists" is success.
 pub async fn ensure_buckets(state: &AppState) -> Result<(), AppError> {
-    for (bucket, public) in [(BUCKET_UPLOADS, false), (BUCKET_TARBALLS, true)] {
+    for (bucket, public) in [(bucket_uploads(), false), (bucket_tarballs(), true)] {
         let url = format!("{}/storage/v1/bucket", state.cfg.supabase_api_url);
         let response = state
             .http

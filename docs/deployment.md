@@ -10,13 +10,37 @@
 | 域名 | 内容 | 路由 |
 |---|---|---|
 | `https://dm.shrwk.com` | 市场全站(API + 页面 + tarball) | traefik IngressRoute → svc/market:8398 |
+| `https://dm-dev.shrwk.com` | **dev 市场**(独立 schema + 桶,资源轻量) | traefik IngressRoute → svc/market.market-dev:8398 |
 | `https://sb.shrwk.com` | Supabase Auth/Storage(浏览器面) | traefik IngressRoute → svc/supabase-envoy:8000 |
 
 两条路由共用同一张 `shrwk-tls` 通配证书与同一 traefik websecure 入口;
 局域网走 hosts(`192.168.2.1 dm.shrwk.com` / `sb.shrwk.com`),公网走
-aliyun DNS → t2 frps(SNI 分流)→ frpc(`dm-web-macus` / `sb-web-macus`
+aliyun DNS → t2 frps(SNI 分流,按 frpc 声明的域名自动路由,**t2 侧零配置**)
+→ frpc(`dm-web-macus` / `dm-dev-web-macus` / `sb-web-macus`
 指向 192.168.2.1:443)。**新增子域名时:aliyun 加一条 A 记录指向
-119.91.111.213 + conf.d 加一个 https proxy + traefik 路由,三件套。**
+119.91.111.213(*.shrwk.com 通配 A 已覆盖)+ macus frpc conf.d 加一个
+https proxy + traefik 路由,三件套。**
+
+## dev 市场(dm-dev.shrwk.com)
+
+第二套轻量市场(2026-11-10 上线):ns `market-dev`,数据库同库**独立
+schema `market_dev`**(登录角色 `market_dev` 的 role-level search_path,
+服务端 sqlx 无限定名查询零改动落对地方;DML 授权 + default privileges
+见 deploy-dev.sh),存储**独立桶** `uploads-dev`/`tarballs-dev`(环境变量
+`UPLOADS_BUCKET`/`TARBALLS_BUCKET`,生产不设则用默认 uploads/tarballs),
+Auth **共享** GoTrue(sb.shrwk.com 同一登录);profiles 按 schema 隔离,
+deploy-dev.sh 每次从 public.profiles 同步管理员。资源:server limit
+100Mi + verifier limit 256Mi(仅 pack:check 突发),稳态合计 <100Mi。
+
+```sh
+deploy/build.sh --tag dev-$(date +%m%d-%H%M)   # 镜像与生产同一份(dev 只差 env)
+deploy/deploy-dev.sh --tag <tag>               # ns/secret/schema/迁移(幂等)+ apply + rollout
+kubectl -n market-dev logs deploy/market-server --tail=50
+```
+
+迁移必须**幂等**(0002 的 ADD CONSTRAINT 已按名守护;重跑 deploy-dev.sh
+安全)。0000_auth_stub 仅限裸 Postgres 测试库,真实 supabase 上跳过
+(auth schema 属 supabase_admin,postgres 角色无权建表)。
 
 ## 部署 / 升级
 

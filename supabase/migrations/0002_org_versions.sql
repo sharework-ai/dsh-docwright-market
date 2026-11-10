@@ -10,9 +10,15 @@
 -- Publisher org on profiles: nullable (legacy accounts keep working), but
 -- submitting requires one. Unique among accounts that HAVE set one — many
 -- NULLs coexist, so the partial unique index does the job.
+-- (Idempotent: Postgres has no ADD CONSTRAINT IF NOT EXISTS, so the shape
+-- check guards by name — re-running apply-migration must stay safe.)
 alter table profiles add column if not exists org text;
-alter table profiles add constraint profiles_org_shape
-  check (org is null or org ~ '^[a-z0-9][a-z0-9-]{0,38}$');
+do $$ begin
+  if not exists (select from pg_constraint where conname = 'profiles_org_shape' and conrelid = 'profiles'::regclass) then
+    alter table profiles add constraint profiles_org_shape
+      check (org is null or org ~ '^[a-z0-9][a-z0-9-]{0,38}$');
+  end if;
+end $$;
 create unique index if not exists profiles_org_unique_idx
   on profiles (org) where org is not null;
 

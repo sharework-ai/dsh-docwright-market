@@ -129,7 +129,7 @@ pub async fn submit(
     // 3. Archive the raw upload, then enqueue for human review.
     let submission_id = Uuid::new_v4();
     let archive_path = format!("{}.tgz", submission_id);
-    storage::upload(&state, storage::BUCKET_UPLOADS, &archive_path, archive).await?;
+    storage::upload(&state, storage::bucket_uploads(), &archive_path, archive).await?;
 
     sqlx::query(
         "insert into submissions (id, pack_name, version, uploader, report, archive_path, \

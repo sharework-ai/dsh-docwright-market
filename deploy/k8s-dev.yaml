@@ -1,0 +1,157 @@
+# docwright pack market — DEV deployment on the local k3s.
+#
+# A second, resource-light market for development: its own schema
+# (market_dev via the role's search_path), its own storage buckets
+# (uploads-dev / tarballs-dev), its own domain (dm-dev.shrwk.com). Auth is
+# the SHARED supabase GoTrue (sb.shrwk.com) — the same login works on both
+# markets; profiles/is_admin are per-schema (bootstrapped from prod by
+# deploy-dev.sh).
+#
+# Applies after deploy-dev.sh has created the market-dev namespace, the
+# market-dev-env secret, and the shrwk-tls certificate copy. In-cluster
+# wiring:
+#   server  -> supabase-postgres.supabase.svc:5432 (DATABASE_URL, role market_dev)
+#           -> supabase-envoy.supabase.svc:8000    (Auth/Storage REST)
+#           -> verifier.market-dev.svc:8399        (POST /verify)
+#   traefik -> market.market-dev.svc:8398          (dm-dev.shrwk.com, TLS shrwk-tls)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: market
+  namespace: market-dev
+spec:
+  selector:
+    app: market-server
+  ports:
+    - port: 8398
+      targetPort: 8398
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: verifier
+  namespace: market-dev
+spec:
+  selector:
+    app: market-verifier
+  ports:
+    - port: 8399
+      targetPort: 8399
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: market-server
+  namespace: market-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: market-server
+  template:
+    metadata:
+      labels:
+        app: market-server
+    spec:
+      containers:
+        - name: server
+          image: localhost/market-server:__TAG__
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: market-dev-env
+          env:
+            - name: LISTEN_HOST
+              value: 0.0.0.0
+            - name: PORT
+              value: "8398"
+            - name: WEB_DIR
+              value: /app/web
+            # Dev storage namespace: never share artifacts with production.
+            - name: UPLOADS_BUCKET
+              value: uploads-dev
+            - name: TARBALLS_BUCKET
+              value: tarballs-dev
+          ports:
+            - containerPort: 8398
+          readinessProbe:
+            httpGet: { path: /api/index, port: 8398 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            # Dev budget: steady-state well under 100 MiB total (the
+            # verifier's limit only peaks during a pack:check run).
+            requests: { memory: 32Mi, cpu: 10m }
+            limits: { memory: 100Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: market-verifier
+  namespace: market-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: market-verifier
+  template:
+    metadata:
+      labels:
+        app: market-verifier
+    spec:
+      # Same hostPath story as production: the verifier runs against the
+      # HOST's own docwright + deepseek-harness checkouts (single-node k3s),
+      # so pack:check's module resolution is 1:1 with the proven machine.
+      volumes:
+        - name: docwright
+          hostPath: { path: /home/sharework/projects/lab/docwright, type: Directory }
+        - name: harness
+          hostPath: { path: /home/sharework/projects/lab/deepseek-harness, type: Directory }
+        - name: verifier-src
+          hostPath: { path: /home/sharework/projects/lab/dsh-docwright-market/verifier, type: Directory }
+      containers:
+        - name: verifier
+          image: localhost/node22-dev:1.1
+          imagePullPolicy: IfNotPresent
+          command: ["node", "/mnt/verifier/index.mjs"]
+          workingDir: /mnt/docwright
+          env:
+            - name: DOCWRIGHT_ROOT
+              value: /mnt/docwright
+            - name: VERIFIER_PORT
+              value: "8399"
+            - name: VERIFIER_TMP
+              value: /tmp/verifier
+            - name: VERIFIER_HOST
+              value: 0.0.0.0
+          volumeMounts:
+            - { name: docwright, mountPath: /mnt/docwright }
+            - { name: harness, mountPath: /mnt/deepseek-harness }
+            - { name: verifier-src, mountPath: /mnt/verifier }
+          ports:
+            - containerPort: 8399
+          readinessProbe:
+            httpGet: { path: /health, port: 8399 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests: { memory: 64Mi, cpu: 10m }
+            limits: { memory: 256Mi }
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: market-dev
+  namespace: market-dev
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`dm-dev.shrwk.com`)
+      kind: Rule
+      services:
+        - name: market
+          port: 8398
+  tls:
+    secretName: shrwk-tls
