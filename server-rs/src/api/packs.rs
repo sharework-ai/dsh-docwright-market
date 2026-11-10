@@ -158,7 +158,7 @@ pub async fn tarball(
             Err(AppError::gone("this pack has been disabled by its owner"))
         }
         Some(_) => {
-            let bytes = storage::download_public(&state, storage::BUCKET_TARBALLS, &file).await?;
+            let bytes = storage::download_public(&state, storage::bucket_tarballs(), &file).await?;
             Ok((
                 [(axum::http::header::CONTENT_TYPE, "application/gzip")],
                 axum::body::Body::from(bytes),

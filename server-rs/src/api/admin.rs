@@ -124,13 +124,13 @@ async fn publish(
         .archive_path
         .clone()
         .ok_or_else(|| AppError::internal("approved submission lost its archive path"))?;
-    let bytes = storage::download(state, storage::BUCKET_UPLOADS, &archive_path).await?;
+    let bytes = storage::download(state, storage::bucket_uploads(), &archive_path).await?;
     let sha = storage::sha256_hex(&bytes);
     let object_path = format!("{}-{}.tgz", sub.pack_name, sub.version);
-    storage::upload(state, storage::BUCKET_TARBALLS, &object_path, bytes).await?;
+    storage::upload(state, storage::bucket_tarballs(), &object_path, bytes).await?;
     // packs.tarball_path carries the bucket context so the download route can
     // match it: "tarballs/<name>-<version>.tgz".
-    let record_path = format!("{}/{}", storage::BUCKET_TARBALLS, object_path);
+    let record_path = format!("{}/{}", storage::bucket_tarballs(), object_path);
 
     let manifest = sub
         .report

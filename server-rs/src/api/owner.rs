@@ -262,7 +262,7 @@ pub async fn delete_pack(
     for (path,) in &paths {
         // "tarballs/<file>.tgz" — strip the bucket prefix for the REST call.
         let Some(object) = path.strip_prefix("tarballs/") else { continue };
-        if let Err(e) = storage::delete(&state, storage::BUCKET_TARBALLS, object).await {
+        if let Err(e) = storage::delete(&state, storage::bucket_tarballs(), object).await {
             storage_warnings.push(format!("{path}: {e}"));
         }
     }
@@ -298,7 +298,7 @@ pub async fn submission_archive(
     }
     let path = archive_path
         .ok_or_else(|| AppError::not_found("submission has no archived archive"))?;
-    let bytes = storage::download(&state, storage::BUCKET_UPLOADS, &path).await?;
+    let bytes = storage::download(&state, storage::bucket_uploads(), &path).await?;
     let filename = format!("{pack_name}-{version}.tgz");
     let mut hdrs = axum::http::HeaderMap::new();
     hdrs.insert(axum::http::header::CONTENT_TYPE, "application/gzip".parse().unwrap());
@@ -376,7 +376,7 @@ pub async fn withdraw_submission(
         .await?;
     let mut storage_warnings: Vec<String> = Vec::new();
     if let Some(path) = archive_path {
-        if let Err(e) = storage::delete(&state, storage::BUCKET_UPLOADS, &path).await {
+        if let Err(e) = storage::delete(&state, storage::bucket_uploads(), &path).await {
             storage_warnings.push(format!("{path}: {e}"));
         }
     }
