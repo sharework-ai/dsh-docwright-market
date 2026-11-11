@@ -29,6 +29,12 @@
       </section>
 
       <section class="block card">
+        <h3 data-i18n="tzTitle"></h3>
+        <p class="muted" style="font-size:0.85rem" data-i18n="tzHint"></p>
+        <label class="field"><span data-i18n="tzLabel"></span><select id="tz-select"></select></label>
+      </section>
+
+      <section class="block card">
         <h3 data-i18n="orgTitle"></h3>
         <p class="muted" style="font-size:0.85rem" data-i18n="orgHint"></p>
         <p id="org-current"><span class="muted" data-i18n="orgNone"></span></p>
@@ -42,6 +48,7 @@
   <script src="/assets/app.js"></script>
   <script>
     MB.header('account')
+    MB.renderTimeZonePicker(document.getElementById('tz-select'))
 
     // ---- auth gate (same pattern as submit.html) ------------------------------
     function readCreds() {

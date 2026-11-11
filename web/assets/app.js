@@ -44,7 +44,10 @@ window.MB = (() => {
       suiteQueued: 'Suite submission accepted — it enters the review queue.',
       trackInPacks: 'Track it on the Packs page',
             queue: 'Pending review queue',
-      tzAuto: 'Time zone: browser default',
+      tzTitle: 'Date & time zone',
+      tzHint: 'Applies to every date shown on the market pages.',
+      tzLabel: 'Time zone',
+            tzAuto: 'Time zone: browser default',
       'tz_Asia/Shanghai': 'China Standard Time (zh-CN)',
       'tz_Europe/London': 'UK time (en-GB)',
       'tz_America/New_York': 'US Eastern time (en-US)',
@@ -174,7 +177,10 @@ window.MB = (() => {
       suiteQueued: '套件投稿已受理——进入审核队列。',
       trackInPacks: '到 Packs 页跟踪进度',
             queue: '待审核队列',
-      tzAuto: '时区：跟随浏览器',
+      tzTitle: '日期与时区',
+      tzHint: '作用于市场各页面展示的所有日期时间。',
+      tzLabel: '时区',
+            tzAuto: '时区：跟随浏览器',
       'tz_Asia/Shanghai': '中国标准时间（中文格式）',
       'tz_Europe/London': '英国时间（英文格式）',
       'tz_America/New_York': '美国东部时间（英文格式）',
@@ -369,6 +375,9 @@ window.MB = (() => {
   }
 
   function header() {
+    // Pages call MB.header from several fallback paths — keep it idempotent:
+    // replace any existing header instead of prepending a second one.
+    document.querySelector('header.site')?.remove()
     const el = document.createElement('header')
     el.className = 'site'
     el.innerHTML = `
@@ -379,17 +388,10 @@ window.MB = (() => {
         <a href="/admin.html" data-i18n="admin" class="hidden" id="nav-admin"></a>
         <span class="spacer"></span>
         <span id="auth-slot"></span>
-        <select id="tz-select" class="lang-btn" title="date & time zone" style="cursor:pointer"></select>
         <button id="lang-btn" class="lang-btn" title="switch language"></button>
       </nav>`
     document.body.prepend(el)
     el.querySelector('#lang-btn').addEventListener('click', () => setLang(lang() === 'zh' ? 'en' : 'zh'))
-    const tzSel = el.querySelector('#tz-select')
-    tzSel.innerHTML = TIME_ZONES.map(tz =>
-      `<option value="${tz.id}">${tz.id === 'auto' ? t('tzAuto') : t('tz_' + tz.id)}</option>`
-    ).join('')
-    tzSel.value = timeZoneId()
-    tzSel.addEventListener('change', () => setTimeZone(tzSel.value))
     applyI18n()
     refreshAuthSlot()
   }
@@ -430,5 +432,15 @@ window.MB = (() => {
     return div.innerHTML
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, get supabase() { return supabase } }
+  /** Populate a <select> with the timezone choices and wire the change
+   * handler (the picker lives on the account page, not the header). */
+  function renderTimeZonePicker(select) {
+    select.innerHTML = TIME_ZONES.map(tz =>
+      `<option value="${tz.id}">${tz.id === 'auto' ? t('tzAuto') : t('tz_' + tz.id)}</option>`
+    ).join('')
+    select.value = timeZoneId()
+    select.addEventListener('change', () => setTimeZone(select.value))
+  }
+
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, get supabase() { return supabase } }
 })()
