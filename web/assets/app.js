@@ -284,6 +284,23 @@ window.MB = (() => {
     { id: 'Europe/London', localeTag: 'en-GB', timeZone: 'Europe/London' },
     { id: 'America/New_York', localeTag: 'en-US', timeZone: 'America/New_York' },
   ]
+  // Entry query strings: ?lang=zh|en&tz=<zone id|auto> — applied once on
+  // arrival (persisted like a manual choice) and stripped from the address
+  // bar, so a refresh or in-site navigation does not force them again.
+  ;(() => {
+    const params = new URLSearchParams(location.search)
+    const langParam = params.get('lang')
+    if (langParam === 'zh' || langParam === 'en') localStorage.setItem('dw-market-lang', langParam)
+    const tzParam = params.get('tz')
+    if (tzParam && TIME_ZONES.some(tz => tz.id === tzParam)) localStorage.setItem('dw-market-tz', tzParam)
+    if (params.has('lang') || params.has('tz')) {
+      params.delete('lang')
+      params.delete('tz')
+      const rest = params.toString()
+      history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash)
+    }
+  })()
+
   function timeZoneId() {
     const saved = localStorage.getItem('dw-market-tz')
     return TIME_ZONES.some(tz => tz.id === saved) ? saved : 'auto'
