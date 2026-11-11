@@ -13,7 +13,7 @@ mod storage;
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use serde_json::json;
 use tower_http::services::ServeDir;
@@ -82,11 +82,17 @@ pub(crate) fn build_router(state: Arc<AppState>, web_dir: &str) -> Router {
         .route("/api/my/submissions", get(api::owner::my_submissions))
         .route("/api/my/submissions/{id}", delete(api::owner::withdraw_submission))
         .route("/api/my/submissions/{id}/archive", get(api::owner::submission_archive))
+        .route("/api/my/suites", get(api::suites::my_suites).post(api::suites::create_suite))
+        .route("/api/my/suites/{name}", patch(api::suites::patch_suite).delete(api::suites::delete_suite))
+        .route("/api/my/suites/{name}/disable", post(api::suites::disable_suite))
+        .route("/api/my/suites/{name}/enable", post(api::suites::enable_suite))
         .route("/api/submissions", post(api::submissions::submit))
         .route("/api/submissions/{id}", get(api::submissions::get_submission))
         .route("/api/packs", get(api::packs::list))
         .route("/api/packs/{name}", get(api::packs::detail))
         .route("/api/index", get(api::packs::index))
+        .route("/api/suites", get(api::suites::list_suites))
+        .route("/api/suites/{name}", get(api::suites::suite_detail))
         .route("/tarballs/{file}", get(api::packs::tarball))
         .route("/api/admin/queue", get(api::admin::queue))
         .route("/api/admin/review/{id}", post(api::admin::review))

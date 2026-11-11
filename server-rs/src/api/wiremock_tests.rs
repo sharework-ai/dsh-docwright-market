@@ -21,7 +21,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::state::AppState;
 
-use super::tests::{init_log, seed_profile, seed_submission, seed_user, seed_pack};
+use super::tests::{init_log, seed_profile, seed_submission, seed_suite, seed_user, seed_pack};
 
 const TOK_AUTHOR: &str = "tok-author";
 const TOK_ADMIN: &str = "tok-admin";
@@ -853,3 +853,323 @@ async fn submission_archive_is_owner_or_admin_only(pool: PgPool) {
     assert_eq!(admin_hit.status(), StatusCode::OK);
 }
 
+
+// ---------------------------------------------------------------------------
+// Suites over the real router: form submission → mixed queue → approve →
+// public reads → disable filtering.
+
+fn suite_form(name: &str, version: &str, members: &[&str]) -> String {
+    json!({
+        "name": name,
+        "version": version,
+        "description": { "en": "the cosmic suite", "zh": "宇宙套件" },
+        "category": "estimation",
+        "members": members,
+    })
+    .to_string()
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn suite_submission_queue_approve_and_public_reads(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    let admin = Uuid::new_v4();
+    for id in [author, admin] {
+        seed_user(&pool, id).await;
+    }
+    seed_profile(&pool, author, Some("author-org")).await;
+    sqlx::query("insert into profiles (id, is_admin) values ($1, true)")
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+    seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
+    seed_pack(&pool, "member-b", "0.2.0", author, "sha256:b").await;
+
+    let (supabase, verifier) = start_mocks(author, admin, author, true).await;
+    let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
+
+    // A member outside the packs table is refused at the door, no queue entry.
+    let bad = json_request(
+        &app,
+        "POST",
+        "/api/my/suites",
+        TOK_AUTHOR,
+        &suite_form("cosmic", "1.0.0", &["member-a", "ghost"]),
+    )
+    .await;
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    assert!(json_body(bad).await["error"].as_str().unwrap().contains("ghost"));
+
+    // The valid form enters the queue (no archive, form in suite_meta).
+    let ok = json_request(
+        &app,
+        "POST",
+        "/api/my/suites",
+        TOK_AUTHOR,
+        &suite_form("cosmic", "1.0.0", &["member-a", "member-b"]),
+    )
+    .await;
+    assert_eq!(ok.status(), StatusCode::OK, "missing members fail, existing ones pass");
+    let sub_id = json_body(ok).await["id"].as_str().unwrap().to_string();
+
+    // The queue mixes pack and suite submissions, each labeled with its kind.
+    let queue = json_request(&app, "GET", "/api/admin/queue", TOK_ADMIN, "").await;
+    assert_eq!(queue.status(), StatusCode::OK);
+    let queue_body = json_body(queue).await;
+    let item = queue_body["queue"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["kind"] == "suite")
+        .expect("suite submission shows in the queue with kind=suite")
+        .clone();
+    assert_eq!(item["suiteMeta"]["name"], "cosmic");
+    assert_eq!(item["packName"], "cosmic");
+
+    // Approving writes the catalog row; the pack card gains its suite link.
+    let approve = json_request(
+        &app,
+        "POST",
+        &format!("/api/admin/review/{sub_id}"),
+        TOK_ADMIN,
+        r#"{ "action": "approve" }"#,
+    )
+    .await;
+    assert_eq!(approve.status(), StatusCode::OK);
+
+    let packs = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder().uri("/api/packs").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    let packs_body = json_body(packs).await;
+    assert_eq!(packs_body["packs"][0]["suites"], json!(["cosmic"]));
+
+    // Detail: members expand into pack cards; one member vanishes from the
+    // catalog after approval and must read back flagged `missing`.
+    sqlx::query("delete from pack_versions where name = 'member-b'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("delete from packs where name = 'member-b'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let detail = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder().uri("/api/suites/cosmic").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(detail.status(), StatusCode::OK);
+    let detail_body = json_body(detail).await;
+    let cards = detail_body["members"].as_array().unwrap();
+    let found = cards.iter().find(|c| c["name"] == "member-a").unwrap();
+    assert_eq!(found["missing"], false);
+    assert_eq!(found["version"], "0.1.0");
+    let gone = cards.iter().find(|c| c["name"] == "member-b").unwrap();
+    assert_eq!(gone["missing"], true);
+
+    // Index: format stays 2; the optional suites array rides along.
+    let index = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder().uri("/api/index").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    let index_body = json_body(index).await;
+    assert_eq!(index_body["format"], 2);
+    assert_eq!(index_body["suites"][0]["name"], "cosmic");
+    assert_eq!(index_body["packs"][0]["suites"], json!(["cosmic"]));
+
+    // Disabling hides the suite from every public read surface.
+    let disable = json_request(&app, "POST", "/api/my/suites/cosmic/disable", TOK_AUTHOR, "").await;
+    assert_eq!(disable.status(), StatusCode::OK);
+
+    let suites = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder().uri("/api/suites").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(json_body(suites).await["suites"].as_array().unwrap().is_empty());
+
+    let detail = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder().uri("/api/suites/cosmic").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(detail.status(), StatusCode::NOT_FOUND);
+
+    let index = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder().uri("/api/index").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    let index_body = json_body(index).await;
+    assert!(index_body["suites"].as_array().unwrap().is_empty());
+    assert_eq!(index_body["packs"][0]["suites"], json!([]));
+
+    // Enable restores everything.
+    let enable = json_request(&app, "POST", "/api/my/suites/cosmic/enable", TOK_AUTHOR, "").await;
+    assert_eq!(enable.status(), StatusCode::OK);
+    let suites = tower::ServiceExt::oneshot(
+        app,
+        Request::builder().uri("/api/suites").body(Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(json_body(suites).await["suites"][0]["name"], "cosmic");
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn suite_edits_and_deletions_queue_instead_of_touching_the_catalog(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    let admin = Uuid::new_v4();
+    let stranger = Uuid::new_v4();
+    for id in [author, admin, stranger] {
+        seed_user(&pool, id).await;
+    }
+    seed_profile(&pool, author, Some("author-org")).await;
+    sqlx::query("insert into profiles (id, is_admin) values ($1, true)")
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+    seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
+    seed_suite(&pool, "cosmic", &["member-a"], true, author).await;
+
+    let (supabase, verifier) = start_mocks(author, admin, stranger, true).await;
+    let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
+
+    // Another account can neither edit nor delete someone else's suite.
+    let stranger_edit = json_request(
+        &app,
+        "PATCH",
+        "/api/my/suites/cosmic",
+        TOK_STRANGER,
+        &suite_form("cosmic", "1.1.0", &["member-a"]),
+    )
+    .await;
+    assert_eq!(stranger_edit.status(), StatusCode::FORBIDDEN);
+
+    // A same-version edit is refused (versions must strictly increase).
+    let same = json_request(
+        &app,
+        "PATCH",
+        "/api/my/suites/cosmic",
+        TOK_AUTHOR,
+        &suite_form("cosmic", "1.0.0", &["member-a"]),
+    )
+    .await;
+    assert_eq!(same.status(), StatusCode::CONFLICT);
+
+    // A proper edit enqueues; the live catalog stays untouched.
+    let edit = json_request(
+        &app,
+        "PATCH",
+        "/api/my/suites/cosmic",
+        TOK_AUTHOR,
+        &suite_form("cosmic", "1.1.0", &["member-a"]),
+    )
+    .await;
+    assert_eq!(edit.status(), StatusCode::OK);
+    let (version,): (String,) = sqlx::query_as("select version from suites where name = 'cosmic'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(version, "1.0.0", "queued edits do not touch the live suite");
+
+    // One pending submission per suite: approve the edit before proceeding.
+    let queue = json_request(&app, "GET", "/api/admin/queue", TOK_ADMIN, "").await;
+    let edit_id = json_body(queue).await["queue"][0]["id"].as_str().unwrap().to_string();
+    let approve_edit = json_request(
+        &app,
+        "POST",
+        &format!("/api/admin/review/{edit_id}"),
+        TOK_ADMIN,
+        r#"{ "action": "approve" }"#,
+    )
+    .await;
+    assert_eq!(approve_edit.status(), StatusCode::OK);
+    let (version,): (String,) = sqlx::query_as("select version from suites where name = 'cosmic'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(version, "1.1.0", "the approved edit overwrites the live suite");
+
+    // Deleting the published suite also queues — approval is the trigger.
+    let delete = json_request(&app, "DELETE", "/api/my/suites/cosmic", TOK_AUTHOR, "").await;
+    assert_eq!(delete.status(), StatusCode::OK);
+    assert_eq!(json_body(delete).await["mode"], "queued");
+    let (count,): (i64,) = sqlx::query_as("select count(*) from suites where name = 'cosmic'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1, "the suite survives until an admin approves the deletion");
+
+    // Admin approves the deletion → the row goes away.
+    let queue = json_request(&app, "GET", "/api/admin/queue", TOK_ADMIN, "").await;
+    let queue_body = json_body(queue).await;
+    let items = queue_body["queue"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "only the deletion submission is still pending");
+    let delete_id = items
+        .iter()
+        .find(|i| i["suiteMeta"]["action"] == "delete")
+        .expect("deletion submission is flagged")
+        ["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let approve = json_request(
+        &app,
+        "POST",
+        &format!("/api/admin/review/{delete_id}"),
+        TOK_ADMIN,
+        r#"{ "action": "approve", "note": "cleaned up" }"#,
+    )
+    .await;
+    assert_eq!(approve.status(), StatusCode::OK);
+    let (count,): (i64,) = sqlx::query_as("select count(*) from suites where name = 'cosmic'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn never_published_suite_submissions_withdraw_directly(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    seed_user(&pool, author).await;
+    seed_profile(&pool, author, Some("author-org")).await;
+    seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
+
+    let (supabase, verifier) = start_mocks(author, author, author, true).await;
+    let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
+
+    let ok = json_request(
+        &app,
+        "POST",
+        "/api/my/suites",
+        TOK_AUTHOR,
+        &suite_form("draft-suite", "1.0.0", &["member-a"]),
+    )
+    .await;
+    assert_eq!(ok.status(), StatusCode::OK);
+
+    // DELETE with no suites row = withdraw the pending submission directly.
+    let delete = json_request(&app, "DELETE", "/api/my/suites/draft-suite", TOK_AUTHOR, "").await;
+    assert_eq!(delete.status(), StatusCode::OK);
+    assert_eq!(json_body(delete).await["mode"], "withdrawn");
+    let (count,): (i64,) = sqlx::query_as("select count(*) from submissions where kind = 'suite'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}

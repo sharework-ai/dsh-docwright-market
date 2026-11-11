@@ -29,6 +29,8 @@ pub(crate) struct SubmissionRow {
     pub(crate) author: Option<String>,
     pub(crate) license: Option<String>,
     pub(crate) homepage: Option<String>,
+    pub(crate) kind: String,
+    pub(crate) suite_meta: Option<Value>,
 }
 
 /// GET /api/admin/queue — pending submissions, oldest first, full reports.
@@ -47,11 +49,13 @@ pub async fn queue(
         author: Option<String>,
         license: Option<String>,
         homepage: Option<String>,
+        kind: String,
+        suite_meta: Option<Value>,
         created_at: DateTime<Utc>,
     }
     let rows: Vec<Row> = sqlx::query_as(
-        "select id, pack_name, version, report, category, author, license, homepage, created_at \
-         from submissions where status = 'pending' order by created_at asc",
+        "select id, pack_name, version, report, category, author, license, homepage, kind, \
+         suite_meta, created_at from submissions where status = 'pending' order by created_at asc",
     )
     .fetch_all(&state.db)
     .await?;
@@ -66,6 +70,8 @@ pub async fn queue(
             "author": r.author,
             "license": r.license,
             "homepage": r.homepage,
+            "kind": r.kind,
+            "suiteMeta": r.suite_meta,
             "createdAt": r.created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         })).collect::<Vec<_>>(),
     })))
@@ -89,8 +95,8 @@ pub async fn review(
 ) -> Result<Json<Value>, AppError> {
     let admin: AuthUser = require_admin(&state, &headers).await?;
     let row: Option<SubmissionRow> = sqlx::query_as(
-        "select id, pack_name, version, uploader, archive_path, report, category, author, license, homepage \
-         from submissions where id = $1",
+        "select id, pack_name, version, uploader, archive_path, report, category, author, license, \
+         homepage, kind, suite_meta from submissions where id = $1",
     )
     .bind(id)
     .fetch_optional(&state.db)
@@ -101,6 +107,11 @@ pub async fn review(
         "reject" => {
             mark_reviewed(&state.db, id, "rejected", body.note.as_deref(), admin.id).await?;
             Ok(Json(json!({ "ok": true, "status": "rejected" })))
+        }
+        "approve" if sub.kind == "suite" => {
+            publish_suite(&state.db, &sub).await?;
+            mark_reviewed(&state.db, sub.id, "approved", body.note.as_deref(), admin.id).await?;
+            Ok(Json(json!({ "ok": true, "status": "approved", "suite": sub.pack_name })))
         }
         "approve" => {
             publish(&state, &admin, &sub, body.note.as_deref()).await?;
@@ -259,6 +270,57 @@ pub(crate) async fn upsert_published_pack(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    Ok(())
+}
+
+/// Suite publish: form-only submissions carry no archive, so the catalog
+/// write is pure SQL. `action: "delete"` removes the row; anything else is an
+/// upsert whose form was validated at submission time (member packs existing
+/// then; ones deleted since stay on the list and read back as `missing`).
+/// Split from `review` so tests can drive it against a scratch database.
+pub(crate) async fn publish_suite(db: &sqlx::PgPool, sub: &SubmissionRow) -> Result<(), AppError> {
+    let meta = sub
+        .suite_meta
+        .clone()
+        .ok_or_else(|| AppError::internal("suite submission lost its form content"))?;
+    if meta.get("action").and_then(Value::as_str) == Some("delete") {
+        sqlx::query("delete from suites where name = $1")
+            .bind(&sub.pack_name)
+            .execute(db)
+            .await?;
+        return Ok(());
+    }
+    // The display author comes from the submitter's profile (the suite form
+    // has no author field); the suite name is the fallback.
+    let author: Option<(Option<String>,)> =
+        sqlx::query_as("select display_name from profiles where id = $1")
+            .bind(sub.uploader)
+            .fetch_optional(db)
+            .await?;
+    let author = author
+        .and_then(|(a,)| a)
+        .unwrap_or_else(|| sub.pack_name.clone());
+    sqlx::query(
+        "insert into suites (name, version, description, category, author, author_id, members) \
+         values ($1, $2, $3, $4, $5, $6, $7) \
+         on conflict (name) do update set \
+           version = excluded.version, \
+           description = excluded.description, \
+           category = excluded.category, \
+           author = excluded.author, \
+           author_id = excluded.author_id, \
+           members = excluded.members, \
+           updated = now()",
+    )
+    .bind(&sub.pack_name)
+    .bind(&sub.version)
+    .bind(meta.get("description").cloned().unwrap_or(json!({ "en": "" })))
+    .bind(meta.get("category").and_then(Value::as_str).unwrap_or("other"))
+    .bind(&author)
+    .bind(sub.uploader)
+    .bind(meta.get("members").cloned().unwrap_or(json!([])))
+    .execute(db)
+    .await?;
     Ok(())
 }
 

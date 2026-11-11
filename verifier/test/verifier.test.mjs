@@ -25,7 +25,6 @@ const {
   findPackDir,
   checkShape,
   contentHashOf,
-  builtinPackNames,
 } = await import('../index.mjs')
 
 async function makeTgz(files, dirName = 'pack-root') {
@@ -93,7 +92,9 @@ test('findPackDir: stray tree yields null', async () => {
   await fs.rm(dir, { recursive: true, force: true })
 })
 
-test('checkShape flags builtin collision and dir mismatch', async () => {
+test('checkShape flags dir mismatch', async () => {
+  // The builtin-collision rule is gone on purpose: the npm package ships
+  // zero builtin packs, so any name is fair game (its dir must still match).
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'verifier-shape-'))
   const pack = path.join(dir, 'wrong-dir')
   await fs.mkdir(pack)
@@ -101,10 +102,7 @@ test('checkShape flags builtin collision and dir mismatch', async () => {
     path.join(pack, 'manifest.json'),
     JSON.stringify({ name: 'cosmic-func', version: '1.0.0' }),
   )
-  const builtins = await builtinPackNames()
-  assert.ok(builtins.has('cosmic-func'), 'fixture docwright must expose builtin names')
-  const { problems } = await checkShape(pack, { builtins })
-  assert.ok(problems.some(p => p.includes('collides with a docwright built-in')))
+  const { problems } = await checkShape(pack, { builtins: new Set() })
   assert.ok(problems.some(p => p.includes('must equal manifest.name')))
   await fs.rm(dir, { recursive: true, force: true })
 })

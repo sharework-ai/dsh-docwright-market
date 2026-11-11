@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main id="main">
+    <p class="muted">Loading…</p>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    const name = new URLSearchParams(location.search).get('name')
+
+    function render({ suite, members }) {
+      if (!suite) {
+        document.getElementById('main').innerHTML = `<h1>${MB.t('suiteNotFound')}</h1>`
+        return
+      }
+      document.title = `${suite.name} — docwright pack market`
+      const cards = (members || []).map(m => m.missing ? `
+        <div class="card">
+          <h3>${MB.esc(m.name)} <span class="badge code">${MB.t('missingMember')}</span></h3>
+          <div class="desc muted">${MB.t('membersLabel')} — ${MB.t('missingMember')}</div>
+        </div>` : `
+        <div class="card">
+          <h3><a href="/pack.html?name=${encodeURIComponent(m.name)}">${MB.esc(m.name)}</a>@${MB.esc(m.version)}</h3>
+          <div class="desc">${MB.esc(MB.localizedDesc(m.description))}</div>
+          <div class="meta">
+            ${(m.consumes || []).map(c => `<span class="chip">${MB.esc(c)}</span>`).join('')}
+          </div>
+        </div>`).join('')
+
+      document.getElementById('main').innerHTML = `
+        <p><a class="chip" href="/">← ${MB.t('browse')}</a></p>
+        <h1>${MB.esc(suite.name)} <span class="muted">@${MB.esc(suite.version)}</span></h1>
+        <p>${MB.esc(MB.localizedDesc(suite.description))}</p>
+        <section class="block">
+          <table class="kv">
+            <tr><td>${MB.t('category')}</td><td>${MB.esc(suite.category)}</td></tr>
+            <tr><td>${MB.t('author')}</td><td>${MB.esc(suite.author)}</td></tr>
+            <tr><td>${MB.t('updated')}</td><td>${MB.esc(suite.updated)}</td></tr>
+          </table>
+        </section>
+        <section class="block">
+          <h2>${MB.t('membersLabel')}</h2>
+          <div class="grid">${cards}</div>
+        </section>
+        <section class="block">
+          <h2>${MB.t('install')}</h2>
+          <p class="muted" style="font-size:0.9rem">
+            In a DSH session with the docwright plugin, just ask:
+            <strong>“安装 ${MB.esc(suite.name)} 套件”</strong> (or “install the ${MB.esc(suite.name)} suite”).
+            <span lang="zh">在装有 docwright 插件的 DSH 会话中直接说<strong>“安装 ${MB.esc(suite.name)} 套件”</strong>即可:
+            模型会按成员清单一次装上全部 pack,你确认后才执行。</span>
+          </p>
+        </section>`
+      MB.header('browse')
+    }
+
+    MB.header('browse')
+    if (!name) {
+      location.href = '/'
+    } else {
+      MB.api(`/api/suites/${encodeURIComponent(name)}`)
+        .then(render)
+        .catch(e => {
+          document.getElementById('main').innerHTML = `<p class="notice bad">${MB.esc(e.message)}</p>`
+          MB.header('browse')
+        })
+    }
+  </script>
+</body>
+</html>

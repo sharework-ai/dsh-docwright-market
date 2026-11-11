@@ -21,6 +21,13 @@
     <div id="chips" class="chips"></div>
     <div id="packs" class="grid"></div>
     <p id="empty" class="muted hidden" data-i18n="noPacks"></p>
+
+    <section class="block">
+      <h2 data-i18n="suites"></h2>
+      <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
+      <div id="suites" class="grid"></div>
+      <p id="no-suites" class="muted hidden" data-i18n="noSuites"></p>
+    </section>
     <p id="signin-hint" class="muted hidden" data-i18n="signInToPublish"></p>
   </main>
   <footer class="site">
@@ -79,6 +86,24 @@
       all = packs
       renderChips()
       render()
+    })
+    // Suites block: curated pack groups, one click away from the detail page.
+    MB.api('/api/suites').then(({ suites }) => {
+      const box = document.getElementById('suites')
+      document.getElementById('no-suites').classList.toggle('hidden', suites.length > 0)
+      box.innerHTML = suites.map(st => `
+        <div class="card">
+          <h3><a href="/suite.html?name=${encodeURIComponent(st.name)}">${MB.esc(st.name)}</a>@${MB.esc(st.version)}</h3>
+          <div class="desc">${MB.esc(MB.localizedDesc(st.description))}</div>
+          <div class="meta">
+            <span class="chip">${MB.esc(st.category)}</span>
+            ${(st.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
+            ${(st.members || []).length > 5 ? `<span class="chip">+${st.members.length - 5}</span>` : ''}
+          </div>
+        </div>`).join('')
+    }).catch(() => {
+      // Old market without suites, or a transient error: just hide the block.
+      document.getElementById('suites').closest('section.block')?.classList.add('hidden')
     })
     document.getElementById('search').addEventListener('input', render)
     // Publish discoverability for signed-out visitors.

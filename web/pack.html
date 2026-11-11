@@ -16,6 +16,8 @@
     const name = new URLSearchParams(location.search).get('name')
 
     function render({ pack, versions, health }) {
+      const suiteLinks = (pack.suites || []).map(st =>
+        `<a class="chip" href="/suite.html?name=${encodeURIComponent(st)}">${MB.esc(st)}</a>`).join('')
       if (!pack) {
         document.getElementById('main').innerHTML = `<h1>${MB.t('packNotFound')}</h1>`
         return
@@ -32,6 +34,7 @@
         <h1>${MB.esc(pack.name)} <span class="muted">@${MB.esc(pack.version)}</span>
           ${pack.org ? `<span class="chip">org: ${MB.esc(pack.org)}</span>` : ''}</h1>
         <p>${desc}</p>
+        ${suiteLinks ? `<div class="meta"><span class="muted">${MB.t('belongsTo')}:</span> ${suiteLinks}</div>` : ''}
         ${pack.hasFunctionRules ? `<div class="notice bad">${MB.esc(MB.t('functionsWarn'))}</div>` : ''}
         <section class="block">
           <table class="kv">

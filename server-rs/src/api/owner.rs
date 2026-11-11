@@ -322,11 +322,12 @@ pub async fn my_submissions(
         pack_name: String,
         version: String,
         status: String,
+        kind: String,
         created_at: chrono::DateTime<chrono::Utc>,
         review_note: Option<String>,
     }
     let rows: Vec<Row> = sqlx::query_as(
-        "select id, pack_name, version, status, created_at, review_note \
+        "select id, pack_name, version, status, kind, created_at, review_note \
          from submissions where uploader = $1 order by created_at desc limit 100",
     )
     .bind(user.id)
@@ -339,6 +340,7 @@ pub async fn my_submissions(
             "packName": r.pack_name,
             "version": r.version,
             "status": r.status,
+            "kind": r.kind,
             "createdAt": r.created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
             "reviewNote": r.review_note,
         })).collect::<Vec<_>>(),

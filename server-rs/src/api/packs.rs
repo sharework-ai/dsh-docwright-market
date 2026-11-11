@@ -4,6 +4,7 @@
 //! "existed, withheld"), and version history makes every past release
 //! downloadable again.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
@@ -53,7 +54,7 @@ const PACK_COLUMNS: &str = "name, version, description, category, author, author
 /// involved — the CALLER (the model) decomposes intent into keywords.
 #[derive(serde::Deserialize)]
 pub struct ListQuery {
-    q: Option<String>,
+    pub(crate) q: Option<String>,
 }
 
 pub async fn list(
@@ -96,10 +97,25 @@ pub async fn list(
         }
         query.fetch_all(&state.db).await?
     };
+    let membership = crate::api::suites::membership_map(&state.db).await?;
     Ok(Json(json!({
         "ok": true,
-        "packs": rows.iter().map(|r| pack_json(r)).collect::<Vec<_>>(),
+        "packs": rows
+            .iter()
+            .map(|r| with_suites(pack_json(r), &membership))
+            .collect::<Vec<_>>(),
     })))
+}
+
+/// Attach the `suites` array (enabled suites containing this pack) to a pack
+/// record — the pack card's "belongs to" links.
+fn with_suites(mut card: Value, membership: &BTreeMap<String, Vec<String>>) -> Value {
+    let names = membership
+        .get(card["name"].as_str().unwrap_or_default())
+        .cloned()
+        .unwrap_or_default();
+    card["suites"] = json!(names);
+    card
 }
 
 /// GET /api/packs/{name} — detail incl. the latest health sheet (from the
@@ -124,9 +140,10 @@ pub async fn detail(
         ),
         None => (Value::Null, Value::Null),
     };
+    let membership = crate::api::suites::membership_map(&state.db).await?;
     Ok(Json(json!({
         "ok": true,
-        "pack": pack_json(&row),
+        "pack": with_suites(pack_json(&row), &membership),
         "versions": versions_json(&state, &name).await?,
         "health": health_sheet,
         "verifiedAt": verified_at,
@@ -142,9 +159,11 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Ap
     )
     .fetch_all(&state.db)
     .await?;
+    let suites = crate::api::suites::enabled_suites(&state.db).await?;
+    let membership = crate::api::suites::membership_map(&state.db).await?;
     let mut packs = Vec::with_capacity(rows.len());
     for r in &rows {
-        packs.push(json!({
+        packs.push(with_suites(json!({
             "name": r.name,
             "version": r.version,
             "description": r.description,
@@ -164,14 +183,16 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Ap
             "added": r.added.date().to_string(),
             "updated": r.updated.date().to_string(),
             "versions": versions_json(&state, &r.name).await?,
-        }));
+        }), &membership));
     }
+    // Optional format-2 extension: old clients ignore unknown fields.
     Ok(Json(json!({
         "format": 2,
         "generatedAt": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         "origin": state.cfg.public_origin,
         "source": state.cfg.source_url,
         "packs": packs,
+        "suites": suites,
     })))
 }
 

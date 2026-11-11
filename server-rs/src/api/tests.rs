@@ -8,8 +8,9 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use super::admin::{mark_reviewed, upsert_published_pack, SubmissionRow};
+use super::admin::{mark_reviewed, publish_suite, upsert_published_pack, SubmissionRow};
 use super::submissions::check_submission_rules;
+use super::suites::{check_suite_rules, enabled_suites, membership_map, SuiteMeta};
 use crate::auth::AuthUser;
 use crate::error::AppError;
 use serde_json::{json, Value};
@@ -84,6 +85,32 @@ pub(crate) async fn seed_submission(
     .execute(pool)
     .await
     .expect("seed submission");
+}
+
+pub(crate) async fn seed_suite(pool: &PgPool, name: &str, members: &[&str], enabled: bool, author_id: Uuid) {
+    sqlx::query(
+        "insert into suites (name, version, description, category, author, author_id, members, enabled) \
+         values ($1, '1.0.0', $2::jsonb, 'dev', 'author', $3, $4::jsonb, $5)",
+    )
+    .bind(name)
+    .bind(r#"{"en":"seed suite","zh":"种子套件"}"#)
+    .bind(author_id)
+    .bind(serde_json::to_value(members).unwrap())
+    .bind(enabled)
+    .execute(pool)
+    .await
+    .expect("seed suite");
+}
+
+fn suite_meta(name: &str, version: &str, members: &[&str]) -> SuiteMeta {
+    SuiteMeta::parse(&json!({
+        "name": name,
+        "version": version,
+        "description": { "en": "a suite", "zh": "套件" },
+        "category": "dev",
+        "members": members,
+    }))
+    .expect("valid suite meta")
 }
 
 fn err_text(error: AppError) -> String {
@@ -192,6 +219,8 @@ async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
         author: Some("sharework-ai".into()),
         license: Some("MIT".into()),
         homepage: None,
+        kind: "pack".into(),
+        suite_meta: None,
     };
     let manifest = json!({
         "description": { "en": "eng", "zh": "中文" },
@@ -248,6 +277,8 @@ async fn update_publish_overwrites_but_keeps_added(pool: PgPool) {
         author: Some("a".into()),
         license: Some("MIT".into()),
         homepage: None,
+        kind: "pack".into(),
+        suite_meta: None,
     };
     let manifest = json!({ "description": { "en": "v1" }, "consumes": [], "languages": [] });
     upsert_published_pack(&pool, &sub, &manifest, "sha256:v1", false, "tarballs/a-0.1.0.tgz", "sha256:t1", "org-a")
@@ -309,6 +340,8 @@ async fn republishing_keeps_a_disabled_pack_disabled(pool: PgPool) {
         author: Some("a".into()),
         license: Some("MIT".into()),
         homepage: None,
+        kind: "pack".into(),
+        suite_meta: None,
     };
     let manifest = json!({ "description": { "en": "v1" }, "consumes": [], "languages": [] });
     upsert_published_pack(&pool, &sub, &manifest, "sha256:v1", false, "tarballs/b-0.1.0.tgz", "sha256:t1", "org-a")
@@ -419,6 +452,8 @@ async fn seed_full_pack(pool: &PgPool, name: &str) -> Uuid {
         author: Some("sharework-ai".into()),
         license: Some("MIT".into()),
         homepage: None,
+        kind: "pack".into(),
+        suite_meta: None,
     };
     let manifest = json!({
         "description": { "en": "eng desc", "zh": "中文描述" },
@@ -457,7 +492,13 @@ async fn pack_list_and_detail_render_the_catalog(pool: PgPool) {
     let state = test_state(pool);
     seed_full_pack(&state.db, "shown-pack").await;
 
-    let list = super::packs::list(State(state.clone())).await.unwrap().0;
+    let list = super::packs::list(
+        State(state.clone()),
+        axum::extract::Query(super::packs::ListQuery { q: None }),
+    )
+    .await
+    .unwrap()
+    .0;
     let packs = list["packs"].as_array().unwrap();
     assert_eq!(packs.len(), 1);
     assert_eq!(packs[0]["name"], "shown-pack");
@@ -548,7 +589,13 @@ async fn disabled_packs_vanish_from_the_public_surface(pool: PgPool) {
         .await
         .unwrap();
 
-    let list = super::packs::list(State(state.clone())).await.unwrap().0;
+    let list = super::packs::list(
+        State(state.clone()),
+        axum::extract::Query(super::packs::ListQuery { q: None }),
+    )
+    .await
+    .unwrap()
+    .0;
     assert!(list["packs"].as_array().unwrap().is_empty(), "list hides disabled packs");
 
     let index = super::packs::index(State(state.clone())).await.unwrap().0;
@@ -576,6 +623,8 @@ async fn detail_lists_versions_newest_first(pool: PgPool) {
         author: Some("a".into()),
         license: Some("MIT".into()),
         homepage: None,
+        kind: "pack".into(),
+        suite_meta: None,
     };
     let manifest = json!({ "description": { "en": "v2" }, "consumes": [], "languages": [] });
     upsert_published_pack(&state.db, &sub, &manifest, "sha256:h2", false, "tarballs/hist-pack-0.2.0.tgz", "sha256:t2", "sharework-ai")
@@ -713,4 +762,154 @@ async fn auth_gated_routes_reject_missing_and_bogus_tokens(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+}
+
+// ---------------------------------------------------------------------------
+// Suites: form validation, market rules, catalog writes, read-surface filters.
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn suite_form_rejects_bad_shapes(_pool: PgPool) {
+    init_log();
+    let bad = |body: Value| SuiteMeta::parse(&body).expect_err("must fail");
+    assert!(bad(json!({ "version": "1.0.0", "description": {"en": "x"}, "category": "dev", "members": ["a"] }))
+        .message
+        .contains("name"));
+    assert!(bad(json!({ "name": "Bad_Name", "version": "1.0.0", "description": {"en": "x"}, "category": "dev", "members": ["a"] }))
+        .message
+        .contains("kebab-case"));
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"zh": "只有中文"}, "category": "dev", "members": ["a"] }))
+        .message
+        .contains("description.en"));
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "nope", "members": ["a"] }))
+        .message
+        .contains("category"));
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "dev", "members": [] }))
+        .message
+        .contains("at least one member"));
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "dev", "members": ["a", "a"] }))
+        .message
+        .contains("duplicate member"));
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn suite_members_must_exist_and_versions_must_increase(pool: PgPool) {
+    init_log();
+    let author_id = Uuid::new_v4();
+    seed_user(&pool, author_id).await;
+    let author = user(author_id);
+    seed_pack(&pool, "real-pack", "0.1.0", author_id, "sha256:a").await;
+
+    let error = check_suite_rules(&pool, &suite_meta("s", "1.0.0", &["real-pack", "ghost"]), None)
+        .await
+        .expect_err("a member outside the packs table must fail");
+    assert!(err_text(error).contains("ghost"));
+
+    check_suite_rules(&pool, &suite_meta("s", "1.0.0", &["real-pack"]), None)
+        .await
+        .expect("existing members pass");
+
+    sqlx::query("insert into suites (name, version, description, category, author, author_id, members) \
+         values ('s', '1.0.0', '{}'::jsonb, 'dev', 'a', $1, '[]'::jsonb)")
+        .bind(author.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let error = check_suite_rules(&pool, &suite_meta("s", "1.0.0", &["real-pack"]), Some("1.0.0"))
+        .await
+        .expect_err("edits must bump the version");
+    assert!(err_text(error).contains("strictly increase"));
+    check_suite_rules(&pool, &suite_meta("s", "1.1.0", &["real-pack"]), Some("1.0.0"))
+        .await
+        .expect("a higher version passes");
+}
+
+async fn suite_submission_row(pool: &PgPool, name: &str, version: &str, uploader: Uuid, meta: Value) -> SubmissionRow {
+    let id = Uuid::new_v4();
+    sqlx::query(
+        "insert into submissions (id, pack_name, version, uploader, kind, report, suite_meta) \
+         values ($1, $2, $3, $4, 'suite', '{}'::jsonb, $5)",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(version)
+    .bind(uploader)
+    .bind(meta)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query_as::<_, SubmissionRow>(
+        "select id, pack_name, version, uploader, archive_path, report, category, author, license, \
+         homepage, kind, suite_meta from submissions where id = $1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn approving_a_suite_submission_upserts_the_catalog(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    seed_user(&pool, author).await;
+    seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
+
+    let meta = json!({
+        "name": "cosmic",
+        "version": "1.0.0",
+        "description": { "en": "cosmic suite", "zh": "宇宙套件" },
+        "category": "estimation",
+        "members": ["member-a", "member-b"],
+    });
+    let sub = suite_submission_row(&pool, "cosmic", "1.0.0", author, meta.clone()).await;
+    publish_suite(&pool, &sub).await.expect("approve writes the suite row");
+
+    let (version, members): (String, Value) =
+        sqlx::query_as("select version, members from suites where name = 'cosmic'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(version, "1.0.0");
+    assert_eq!(members, json!(["member-a", "member-b"]));
+
+    // A resubmission with an updated form overwrites in place (members change).
+    let mut meta2 = meta.clone();
+    meta2["version"] = json!("1.1.0");
+    meta2["members"] = json!(["member-a"]);
+    let sub2 = suite_submission_row(&pool, "cosmic", "1.1.0", author, meta2).await;
+    publish_suite(&pool, &sub2).await.expect("update overwrites");
+
+    let (members,): (Value,) = sqlx::query_as("select members from suites where name = 'cosmic'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(members, json!(["member-a"]));
+
+    // A deletion submission removes the row entirely.
+    let sub3 = suite_submission_row(&pool, "cosmic", "1.1.0-del", author, json!({ "name": "cosmic", "action": "delete" })).await;
+    publish_suite(&pool, &sub3).await.expect("delete submission removes");
+    let (count,): (i64,) = sqlx::query_as("select count(*) from suites where name = 'cosmic'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn disabled_suites_vanish_from_the_read_helpers(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    seed_user(&pool, author).await;
+    seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
+    seed_pack(&pool, "member-b", "0.2.0", author, "sha256:b").await;
+    seed_suite(&pool, "live-suite", &["member-a"], true, author).await;
+    seed_suite(&pool, "off-suite", &["member-b"], false, author).await;
+
+    let suites = enabled_suites(&pool).await.unwrap();
+    let names: Vec<&str> = suites.iter().filter_map(|s| s["name"].as_str()).collect();
+    assert_eq!(names, vec!["live-suite"], "disabled suites are absent");
+
+    let map = membership_map(&pool).await.unwrap();
+    assert_eq!(map.get("member-a").unwrap(), &vec!["live-suite".to_string()]);
+    assert!(!map.contains_key("member-b"), "disabled suites contribute no membership");
 }

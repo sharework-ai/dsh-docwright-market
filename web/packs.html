@@ -41,6 +41,28 @@
         <p id="my-subs-empty" class="muted hidden" data-i18n="noSubmissions"></p>
         <div id="my-subs"></div>
       </section>
+
+      <section class="block">
+        <h2 data-i18n="mySuites"></h2>
+        <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
+        <!-- create / edit form: hidden until needed -->
+        <div id="suite-form-card" class="card hidden" style="margin-bottom:0.8rem">
+          <strong style="font-size:0.85rem" id="suite-form-title"></strong>
+          <label class="field"><span data-i18n="suiteName"></span><input id="s-name" placeholder="cosmic"></label>
+          <label class="field"><span data-i18n="suiteDescEn"></span><input id="s-desc-en"></label>
+          <label class="field"><span data-i18n="suiteDescZh"></span><input id="s-desc-zh"></label>
+          <label class="field"><span data-i18n="suiteVersion"></span><input id="s-version" placeholder="1.0.0"></label>
+          <label class="field"><span data-i18n="suiteMembers"></span>
+            <select id="s-members" multiple style="min-height:8rem"></select>
+          </label>
+          <div id="s-msg"></div>
+          <button id="btn-suite-save" class="primary" data-i18n="createSuite"></button>
+          <button id="btn-suite-cancel" class="secondary" data-i18n="cancel"></button>
+        </div>
+        <p id="my-suites-empty" class="muted hidden" data-i18n="noSuitesYet"></p>
+        <div id="my-suites"></div>
+        <div class="meta"><button class="secondary" id="btn-new-suite">+ <span data-i18n="mySuites"></span></button></div>
+      </section>
     </div>
   </main>
   <script src="/vendor/supabase.js"></script>
@@ -201,9 +223,10 @@
       box.innerHTML = submissions.map(s => `
         <div class="card" style="margin-bottom:0.6rem">
           <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
+          ${s.kind === 'suite' ? `<span class="chip">${MB.t('kindSuite')}</span>` : ''}
           ${statusChip(s.status)}
           <span class="muted" style="font-size:0.8rem">${MB.esc(s.createdAt)}</span>
-          <a class="chip" href="#" data-arch="${s.id}" data-name="${MB.esc(s.packName)}" data-version="${MB.esc(s.version)}" title="download submitted archive">↓ tgz</a>
+          ${s.kind !== 'suite' ? `<a class="chip" href="#" data-arch="${s.id}" data-name="${MB.esc(s.packName)}" data-version="${MB.esc(s.version)}" title="download submitted archive">↓ tgz</a>` : ''}
           ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
           ${s.status === 'pending'
             ? `<div class="meta"><button class="danger" data-withdraw="${s.id}">${MB.t('withdraw')}</button></div>`
@@ -227,6 +250,135 @@
       })
     }
 
+    // ---- my suites -------------------------------------------------------------
+    const CATEGORY_WHITELIST = ['estimation', 'dev', 'pm', 'test', 'docs', 'other']
+    let marketPacks = []
+    let suiteFormMode = null // null | 'create' | { editing: name }
+
+    function suiteFormValues() {
+      return {
+        name: document.getElementById('s-name').value.trim(),
+        version: document.getElementById('s-version').value.trim(),
+        description: {
+          en: document.getElementById('s-desc-en').value.trim(),
+          zh: document.getElementById('s-desc-zh').value.trim(),
+        },
+        category: document.getElementById('s-category').value,
+        members: [...document.getElementById('s-members').selectedOptions].map(o => o.value),
+      }
+    }
+
+    function openSuiteForm(mode, suite) {
+      suiteFormMode = mode
+      const card = document.getElementById('suite-form-card')
+      document.getElementById('suite-form-title').textContent =
+        mode === 'create' ? MB.t('createSuite') : `${MB.t('editSuite')}: ${suite.name}`
+      document.getElementById('s-name').value = mode === 'create' ? '' : suite.name
+      document.getElementById('s-name').disabled = mode !== 'create'
+      document.getElementById('s-desc-en').value = mode === 'create' ? '' : (suite.description?.en || '')
+      document.getElementById('s-desc-zh').value = mode === 'create' ? '' : (suite.description?.zh || '')
+      document.getElementById('s-version').value = mode === 'create' ? '' : suite.version
+      const members = mode === 'create' ? [] : (suite.members || [])
+      document.getElementById('s-members').querySelectorAll('option').forEach(o => {
+        o.selected = members.includes(o.value)
+      })
+      if (mode !== 'create') {
+        const cat = document.getElementById('s-category')
+        // category rides in suiteMeta only via edit round-trip; keep the current value otherwise
+        if (suite.category) cat.value = suite.category
+      }
+      document.getElementById('s-msg').innerHTML = ''
+      card.classList.remove('hidden')
+    }
+
+    function closeSuiteForm() {
+      suiteFormMode = null
+      document.getElementById('suite-form-card').classList.add('hidden')
+    }
+
+    document.getElementById('btn-suite-cancel').addEventListener('click', closeSuiteForm)
+
+    document.getElementById('btn-new-suite').addEventListener('click', () => {
+      if (suiteFormMode === 'create') return closeSuiteForm()
+      openSuiteForm('create')
+    })
+
+    document.getElementById('btn-suite-save').addEventListener('click', async () => {
+      const msg = document.getElementById('s-msg')
+      const body = suiteFormValues()
+      try {
+        if (suiteFormMode === 'create') {
+          await MB.api('/api/my/suites', { method: 'POST', body, auth: true })
+          msg.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteCreated'))}</div>`
+        } else if (suiteFormMode) {
+          await MB.api(`/api/my/suites/${encodeURIComponent(suiteFormMode)}`, { method: 'PATCH', body, auth: true })
+          msg.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteUpdated'))}</div>`
+        }
+        closeSuiteForm()
+        await loadMySuites()
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      }
+    })
+
+    async function loadMySuites() {
+      // member multi-select data source: the whole public catalog
+      marketPacks = (await MB.api('/api/packs').catch(() => ({ packs: [] }))).packs
+      const select = document.getElementById('s-members')
+      select.innerHTML = marketPacks.map(p => `<option value="${MB.esc(p.name)}">${MB.esc(p.name)}</option>`).join('')
+      const cat = document.getElementById('s-category')
+      if (!cat) {
+        // category select is injected once next to the form fields
+        const field = document.createElement('label')
+        field.className = 'field'
+        field.innerHTML = `<span>${MB.esc(MB.t('category'))}</span>
+          <select id="s-category">${CATEGORY_WHITELIST.map(c => `<option value="${c}" ${c === 'dev' ? 'selected' : ''}>${c}</option>`).join('')}</select>`
+        document.getElementById('s-version').closest('label.field').after(field)
+      }
+
+      const { suites } = await MB.api('/api/my/suites', { auth: true })
+      document.getElementById('my-suites-empty').classList.toggle('hidden', suites.length > 0)
+      const box = document.getElementById('my-suites')
+      box.innerHTML = suites.map(st => `
+        <div class="card" style="margin-bottom:0.8rem" data-suite="${MB.esc(st.name)}">
+          <h3><a href="/suite.html?name=${encodeURIComponent(st.name)}">${MB.esc(st.name)}</a>@${MB.esc(st.version)}
+            ${st.enabled === false ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
+          </h3>
+          <div class="desc">${MB.esc(MB.localizedDesc(st.description))}</div>
+          <div class="meta">${(st.members || []).map(m => chipEl(m)).join('')}</div>
+          <div class="meta">
+            <button class="secondary" data-act="edit">${MB.t('edit')}</button>
+            <button class="secondary" data-act="${st.enabled === false ? 'enable' : 'disable'}">
+              ${MB.t(st.enabled === false ? 'enable' : 'disable')}
+            </button>
+            <button class="danger" data-act="delete">${MB.t('delete')}</button>
+          </div>
+        </div>`).join('')
+
+      box.querySelectorAll('[data-suite]').forEach(card => {
+        const name = card.dataset.suite
+        card.querySelectorAll('button[data-act]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const act = btn.dataset.act
+            if (act === 'edit') return openSuiteForm(name, suites.find(st => st.name === name))
+            if (act === 'disable' || act === 'enable') {
+              await MB.api(`/api/my/suites/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
+              await loadMySuites()
+              return
+            }
+            if (act === 'delete') {
+              if (!confirm(`${MB.t('delete')} "${name}"?`)) return
+              try {
+                const res = await MB.api(`/api/my/suites/${encodeURIComponent(name)}`, { method: 'DELETE', auth: true })
+                alert(res.mode === 'withdrawn' ? MB.t('suiteWithdrawn') : MB.t('suiteDeleteQueued'))
+                await loadMySuites()
+              } catch (e) { alert(e.message) }
+            }
+          })
+        })
+      })
+    }
+
     async function maybeShowContent() {
       const s = await MB.session()
       document.getElementById('auth-box').classList.toggle('hidden', !!s)
@@ -235,6 +387,7 @@
       await loadHub().catch(() => {})
       await loadMyPacks().catch(() => {})
       await loadMySubmissions().catch(() => {})
+      await loadMySuites().catch(() => {})
     }
 
     maybeShowContent()

@@ -51,8 +51,16 @@
       }
       el.innerHTML = queue.map(item => `
         <div class="card" style="margin-bottom:1rem">
-          <h3>${MB.esc(item.packName)}@${MB.esc(item.version)} <span class="chip">${MB.esc(item.category || '')}</span>
-            <span class="chip">${MB.esc(item.author || '')}</span> <span class="chip">${MB.esc(item.license || '')}</span></h3>
+          <h3>${MB.esc(item.packName)}@${MB.esc(item.version)}
+            <span class="chip ${item.kind === 'suite' ? 'active' : ''}">${MB.t(item.kind === 'suite' ? 'kindSuite' : 'kindPack')}</span>
+            <span class="chip">${MB.esc(item.category || '')}</span>
+            <span class="chip">${MB.esc(item.author || '')}</span>${item.kind === 'pack' ? ` <span class="chip">${MB.esc(item.license || '')}</span>` : ''}</h3>
+          ${item.kind === 'suite' ? `
+            <div class="desc">${MB.esc(MB.localizedDesc(item.suiteMeta?.description))}</div>
+            <div class="meta">${(item.suiteMeta?.members || []).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}</div>
+            <details open><summary>${MB.t('suiteFormContent')}</summary>
+              <pre class="sheet">${MB.esc(JSON.stringify(item.suiteMeta, null, 2))}</pre></details>
+          ` : `
           ${item.report.hasFunctionRules ? `<div class="notice bad">${MB.esc(MB.t('functionsWarn'))}</div>` : ''}
           ${(item.report.problems || []).length ? `<div class="notice bad">${MB.esc(item.report.problems.join('\n'))}</div>` : ''}
           <details open><summary>manifest</summary>
@@ -61,6 +69,7 @@
             <pre class="sheet">${MB.esc((item.report.files || []).join('\n'))}</pre></details>
           <details open><summary>pack:check</summary>
             <pre class="sheet">${MB.esc(item.report.checkOutput || '')}</pre></details>
+          `}
           <label class="field"><span data-i18n="note"></span><input id="note-${item.id}"></label>
           <button class="primary" data-id="${item.id}" data-action="approve">${MB.t('approve')}</button>
           <button class="danger" data-id="${item.id}" data-action="reject">${MB.t('reject')}</button>
