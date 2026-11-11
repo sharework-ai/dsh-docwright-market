@@ -132,17 +132,11 @@ async function isPackDir(dir) {
   }
 }
 
-/** Built-in pack names, read live from the docwright checkout. */
-export async function builtinPackNames() {
-  const dirs = await fs.readdir(path.join(DOCWRIGHT_ROOT, 'packs'), { withFileTypes: true })
-  return new Set(dirs.filter(d => d.isDirectory()).map(d => d.name))
-}
-
 /**
  * Market-level manifest checks that must run before/independently of
  * pack:check (the loader would silently allow some of these by design).
  */
-export async function checkShape(packDir, { builtins }) {
+export async function checkShape(packDir) {
   const problems = []
   let manifest = null
   try {
@@ -157,9 +151,9 @@ export async function checkShape(packDir, { builtins }) {
     if (!NAME_RE.test(manifest.name)) {
       problems.push(`manifest.name "${manifest.name}" must match ${NAME_RE} (kebab-case)`)
     }
-    if (builtins.has(manifest.name)) {
-      problems.push(`name "${manifest.name}" collides with a docwright built-in pack — same-name packs override builtins by design, the market refuses them; pick another name`)
-    }
+    // No builtin-collision rule: the npm package ships ZERO builtin packs
+    // (packs are market-distributed), so there is no builtin namespace a
+    // submission could collide with.
     if (path.basename(packDir) !== manifest.name) {
       problems.push(`directory name "${path.basename(packDir)}" must equal manifest.name "${manifest.name}"`)
     }
@@ -248,8 +242,7 @@ async function handleVerify(req, res) {
       report.problems.push('no pack found: archive root must be a pack directory (manifest.json at its root) or contain exactly one')
       return sendJson(res, 200, { ok: false, report })
     }
-    const builtins = await builtinPackNames()
-    const shape = await checkShape(found, { builtins })
+    const shape = await checkShape(found)
     report.problems.push(...shape.problems)
     report.shapeOk = shape.problems.length === 0
     if (shape.manifest) {

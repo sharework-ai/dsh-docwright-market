@@ -10,3 +10,4 @@ coverage/
 
 # OS noise
 .DS_Store
+packs-out/
