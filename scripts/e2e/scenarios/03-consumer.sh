@@ -43,8 +43,10 @@ scenario_consumer_install() {
   echo "  latest + pinned installs agree with the version history"
 
   # The installed copy must pass docwright's own gate (the market publishes
-  # exactly what it verified).
-  ( cd "$DW" && pnpm run --silent pack:check -- "$into" --with packs ) \
+  # exactly what it verified). The pack:check script is invoked through its
+  # underlying command, not `pnpm run`: the host pnpm may disagree with the
+  # repo's packageManager pin (corepack gate), and tsx is already installed.
+  ( cd "$DW" && node --import tsx/esm scripts/pack-check.ts "$into" --with packs ) \
     | grep -q "PASS" || { sc_fail "pack:check on installed copy failed"; return 1; }
 
   # Re-install without --force conflicts (exit 3); with --force succeeds.

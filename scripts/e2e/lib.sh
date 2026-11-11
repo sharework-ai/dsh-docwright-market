@@ -151,6 +151,8 @@ reset_catalog() {
         select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid'));
     delete from packs where author_id in (
       select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid');
+    delete from suites where author_id in (
+      select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid');
     delete from submissions where uploader in (
       select id from auth.users where email like '%@example.invalid' or email like '%@x.invalid');
   " >/dev/null || { echo "cannot reset catalog" >&2; return 1; }
@@ -199,6 +201,7 @@ teardown_accounts() {
     db_sql "
       delete from pack_versions where name in (select name from packs where author_id = '$uid');
       delete from packs where author_id = '$uid';
+      delete from suites where author_id = '$uid';
       delete from submissions where uploader = '$uid';
       delete from profiles where id = '$uid';
     " >/dev/null 2>&1 || true
