@@ -27,6 +27,10 @@ RUN cp /build/target/release/docwright-market /out-docwright-market
 FROM ${RUNTIME_IMAGE}
 COPY --from=build /out-docwright-market /app/docwright-market
 COPY web /app/web
+# The runtime user is non-root (uid 1000): files copied with restrictive host
+# modes (e.g. a 600 file from a private edit) would 404 in ServeDir. Normalize.
+USER root
+RUN chmod -R a+rX /app/web
 USER app
 WORKDIR /app
 ENV LISTEN_HOST=0.0.0.0 \
