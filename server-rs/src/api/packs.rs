@@ -97,7 +97,16 @@ pub async fn list(
         }
         query.fetch_all(&state.db).await?
     };
+    // Suite members are hidden from the MARKET listing and search (a member
+    // is only reachable through its suite; the suites read surface carries
+    // them). /api/index deliberately KEEPS members: the install lane resolves
+    // members and consumed upstreams from the index. Direct detail stays
+    // reachable (suite pages link member pack pages).
     let membership = crate::api::suites::membership_map(&state.db).await?;
+    let rows: Vec<PackRow> = rows
+        .into_iter()
+        .filter(|r| !membership.contains_key(&r.name))
+        .collect();
     Ok(Json(json!({
         "ok": true,
         "packs": rows

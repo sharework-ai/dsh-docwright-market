@@ -146,6 +146,26 @@ assert all(m.get('missing') is False for m in d['members']), d['members']
   local pack_detail
   pack_detail="$(curl -sf -m 10 "$MARKET/api/packs/$SUITE_A")"
   assert_contains "$pack_detail" "\"suites\":[\"$SUITE_NAME\"]" "pack detail carries suites" || return 1
+
+  # Members are HIDDEN from the market listing and search, but the index (the
+  # install lane's machine catalog) keeps them, and detail stays reachable.
+  curl -sf -m 10 "$MARKET/api/packs" | python3 -c "
+import json, sys
+names = [p['name'] for p in json.load(sys.stdin)['packs']]
+assert '$SUITE_A' not in names and '$SUITE_B' not in names, names
+" || { sc_fail "member still listed in the pack listing"; return 1; }
+  code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$MARKET/api/packs?q=$SUITE_A")"
+  body="$(curl -sf -m 10 "$MARKET/api/packs?q=$SUITE_A")"
+  assert_contains "$body" '"packs":[]' "member-name search returns no packs" || return 1
+  curl -sf -m 10 "$MARKET/api/index" | python3 -c "
+import json, sys
+idx = json.load(sys.stdin)
+names = [p['name'] for p in idx['packs']]
+assert '$SUITE_A' in names and '$SUITE_B' in names, names
+" || { sc_fail "index lost the members"; return 1; }
+  code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$MARKET/api/packs/$SUITE_A")"
+  assert_eq "$code" "200" "member detail stays reachable" || return 1
+
   curl -sf -m 10 "$MARKET/api/index" | python3 -c "
 import json, sys
 idx = json.load(sys.stdin)

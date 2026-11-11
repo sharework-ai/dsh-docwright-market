@@ -938,6 +938,8 @@ async fn suite_submission_queue_approve_and_public_reads(pool: PgPool) {
     .await;
     assert_eq!(approve.status(), StatusCode::OK);
 
+    // Members are hidden from the listing (they are reachable only through
+    // their suite); detail still carries the suite link.
     let packs = tower::ServiceExt::oneshot(
         app.clone(),
         Request::builder().uri("/api/packs").body(Body::empty()).unwrap(),
@@ -945,7 +947,25 @@ async fn suite_submission_queue_approve_and_public_reads(pool: PgPool) {
     .await
     .unwrap();
     let packs_body = json_body(packs).await;
-    assert_eq!(packs_body["packs"][0]["suites"], json!(["cosmic"]));
+    let listed: Vec<&str> = packs_body["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    assert!(!listed.contains(&"member-a"), "suite member must not be listed: {listed:?}");
+    let member_detail = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder()
+            .uri("/api/packs/member-a")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(member_detail.status(), StatusCode::OK);
+    let member_body = json_body(member_detail).await;
+    assert_eq!(member_body["pack"]["suites"], json!(["cosmic"]));
 
     // Detail: members expand into pack cards; one member vanishes from the
     // catalog after approval and must read back flagged `missing`.
