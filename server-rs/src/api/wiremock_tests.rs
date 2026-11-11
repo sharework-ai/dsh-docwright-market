@@ -1049,6 +1049,11 @@ async fn suite_submission_queue_approve_and_public_reads(pool: PgPool) {
         .map(|p| p["name"].as_str().unwrap())
         .collect();
     assert!(!listed.contains(&"member-a"), "suite member must not be listed: {listed:?}");
+    // The listing carries the suite card alongside the packs.
+    assert!(
+        packs_body["suites"].as_array().unwrap().iter().any(|s| s["name"] == "cosmic"),
+        "listing must carry the suite card: {packs_body}"
+    );
     let member_detail = tower::ServiceExt::oneshot(
         app.clone(),
         Request::builder()

@@ -22,12 +22,6 @@
     <div id="packs" class="grid"></div>
     <p id="empty" class="muted hidden" data-i18n="noPacks"></p>
 
-    <section class="block">
-      <h2 data-i18n="suites"></h2>
-      <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
-      <div id="suites" class="grid"></div>
-      <p id="no-suites" class="muted hidden" data-i18n="noSuites"></p>
-    </section>
     <p id="signin-hint" class="muted hidden" data-i18n="signInToPublish"></p>
   </main>
   <footer class="site">
@@ -40,19 +34,36 @@
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
   <script>
-    let all = []
+    // Category chips derive from BOTH listings so a suite-only category
+    // still filters (renderChips runs once packs arrive; suites share it).
     let activeCategory = null
 
     function render() {
       const q = document.getElementById('search').value.trim().toLowerCase()
-      const list = all.filter(p => {
+      const packs = packsAll.filter(p => {
         if (activeCategory && p.category !== activeCategory) return false
         if (!q) return true
         const hay = [p.name, p.author, p.org, MB.localizedDesc(p.description)].join(' ').toLowerCase()
         return hay.includes(q)
       })
+      const suites = suitesAll.filter(s => {
+        if (activeCategory && s.category !== activeCategory) return false
+        if (!q) return true
+        const hay = [s.name, s.category, MB.localizedDesc(s.description), (s.members || []).join(' ')].join(' ').toLowerCase()
+        return hay.includes(q)
+      })
       const grid = document.getElementById('packs')
-      grid.innerHTML = list.map(p => `
+      grid.innerHTML = suites.map(s => `
+        <div class="card suite">
+          <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.name)}</a>@${MB.esc(s.version)}
+            <span class="chip suite-chip" title="${MB.esc((s.members || []).join(', '))}">${MB.t('kindSuite')}</span></h3>
+          <div class="desc">${MB.esc(MB.localizedDesc(s.description))}</div>
+          <div class="meta">
+            <span class="chip">${MB.esc(s.category)}</span>
+            ${(s.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
+            ${(s.members || []).length > 5 ? `<span class="chip">+${s.members.length - 5}</span>` : ''}
+          </div>
+        </div>`).concat(packs.map(p => `
         <div class="card">
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}</h3>
           <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
@@ -64,12 +75,12 @@
             <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
             ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
           </div>
-        </div>`).join('')
-      document.getElementById('empty').classList.toggle('hidden', list.length > 0)
+        </div>`)).join('')
+      document.getElementById('empty').classList.toggle('hidden', packs.length + suites.length > 0)
     }
 
     function renderChips() {
-      const cats = [...new Set(all.map(p => p.category))].sort()
+      const cats = [...new Set(packsAll.concat(suitesAll).map(p => p.category))].sort()
       const chips = document.getElementById('chips')
       chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">${MB.t('all')}</span>`]
         .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">${MB.esc(c)}</span>`))
@@ -82,28 +93,16 @@
     }
 
     MB.header('browse')
-    MB.api('/api/packs').then(({ packs }) => {
-      all = packs
+    // Suites and packs list TOGETHER in one grid — suite members are hidden
+    // from the pack listing server-side, so each entry appears exactly once.
+    // Suites render as purple-tinted cards (see .card.suite in style.css).
+    let packsAll = []
+    let suitesAll = []
+    MB.api('/api/packs').then(({ packs, suites }) => {
+      packsAll = packs
+      suitesAll = suites || []
       renderChips()
       render()
-    })
-    // Suites block: curated pack groups, one click away from the detail page.
-    MB.api('/api/suites').then(({ suites }) => {
-      const box = document.getElementById('suites')
-      document.getElementById('no-suites').classList.toggle('hidden', suites.length > 0)
-      box.innerHTML = suites.map(st => `
-        <div class="card">
-          <h3><a href="/suite.html?name=${encodeURIComponent(st.name)}">${MB.esc(st.name)}</a>@${MB.esc(st.version)}</h3>
-          <div class="desc">${MB.esc(MB.localizedDesc(st.description))}</div>
-          <div class="meta">
-            <span class="chip">${MB.esc(st.category)}</span>
-            ${(st.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
-            ${(st.members || []).length > 5 ? `<span class="chip">+${st.members.length - 5}</span>` : ''}
-          </div>
-        </div>`).join('')
-    }).catch(() => {
-      // Old market without suites, or a transient error: just hide the block.
-      document.getElementById('suites').closest('section.block')?.classList.add('hidden')
     })
     document.getElementById('search').addEventListener('input', render)
     // Publish discoverability for signed-out visitors.

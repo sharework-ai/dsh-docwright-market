@@ -147,16 +147,22 @@ assert all(m.get('missing') is False for m in d['members']), d['members']
   pack_detail="$(curl -sf -m 10 "$MARKET/api/packs/$SUITE_A")"
   assert_contains "$pack_detail" "\"suites\":[\"$SUITE_NAME\"]" "pack detail carries suites" || return 1
 
-  # Members are HIDDEN from the market listing and search, but the index (the
-  # install lane's machine catalog) keeps them, and detail stays reachable.
+  # Suites are listed ALONGSIDE packs: the listing carries a suites array
+  # (the web renders these as purple cards), and a member-name SEARCH returns
+  # no packs but DOES land on the suite card. The index (the install lane's
+  # machine catalog) keeps members, and detail stays reachable.
   curl -sf -m 10 "$MARKET/api/packs" | python3 -c "
 import json, sys
-names = [p['name'] for p in json.load(sys.stdin)['packs']]
+d = json.load(sys.stdin)
+names = [p['name'] for p in d['packs']]
 assert '$SUITE_A' not in names and '$SUITE_B' not in names, names
-" || { sc_fail "member still listed in the pack listing"; return 1; }
+suite = [s for s in d.get('suites', []) if s['name'] == '$SUITE_NAME']
+assert suite and '$SUITE_A' in suite[0]['members'], d.get('suites')
+" || { sc_fail "listing lost the suite card or still lists a member"; return 1; }
   code="$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$MARKET/api/packs?q=$SUITE_A")"
   body="$(curl -sf -m 10 "$MARKET/api/packs?q=$SUITE_A")"
   assert_contains "$body" '"packs":[]' "member-name search returns no packs" || return 1
+  assert_contains "$body" "\"name\":\"$SUITE_NAME\"" "member-name search lands on the suite card" || return 1
   curl -sf -m 10 "$MARKET/api/index" | python3 -c "
 import json, sys
 idx = json.load(sys.stdin)

@@ -107,12 +107,36 @@ pub async fn list(
         .into_iter()
         .filter(|r| !membership.contains_key(&r.name))
         .collect();
+    // Suites are listed ALONGSIDE packs (the web list renders them as distinct
+    // purple cards): every enabled suite on an unfiltered listing, and only
+    // suites whose name/description/category/members match a search term on a
+    // filtered one — a member-name query lands on its suite card here too.
+    let suites: Vec<Value> = crate::api::suites::enabled_suites(&state.db)
+        .await?
+        .into_iter()
+        .filter(|s| {
+            terms.is_empty()
+                || terms.iter().all(|t| {
+                    let hay = format!(
+                        "{} {} {} {} {}",
+                        s["name"].as_str().unwrap_or_default(),
+                        s["category"].as_str().unwrap_or_default(),
+                        s["description"]["en"].as_str().unwrap_or_default(),
+                        s["description"]["zh"].as_str().unwrap_or_default(),
+                        s["members"].as_array().map(|m| m.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
+                    )
+                    .to_lowercase();
+                    hay.contains(&t.to_lowercase())
+                })
+        })
+        .collect();
     Ok(Json(json!({
         "ok": true,
         "packs": rows
             .iter()
             .map(|r| with_suites(pack_json(r), &membership))
             .collect::<Vec<_>>(),
+        "suites": suites,
     })))
 }
 
