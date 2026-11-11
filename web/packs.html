@@ -225,7 +225,7 @@
           <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
           ${s.kind === 'suite' ? `<span class="chip">${MB.t('kindSuite')}</span>` : ''}
           ${statusChip(s.status)}
-          <span class="muted" style="font-size:0.8rem">${MB.esc(s.createdAt)}</span>
+          <span class="muted" style="font-size:0.8rem">${MB.esc(MB.fmtDateTime(s.createdAt))}</span>
           ${s.kind !== 'suite' ? `<a class="chip" href="#" data-arch="${s.id}" data-name="${MB.esc(s.packName)}" data-version="${MB.esc(s.version)}" title="download submitted archive">↓ tgz</a>` : ''}
           ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
           ${s.status === 'pending'

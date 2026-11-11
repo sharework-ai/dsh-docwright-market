@@ -47,8 +47,8 @@
             <tr><td>${MB.t('languages')}</td><td>${MB.esc((pack.languages || []).join(', '))}</td></tr>
             <tr><td>${MB.t('requiresTopic')}</td><td>${pack.requiresTopic ? 'yes' : 'no'}</td></tr>
             <tr><td>${MB.t('artifactPrefix')}</td><td>${MB.esc(pack.artifactPrefix || '—')}</td></tr>
-            <tr><td>${MB.t('added')}</td><td>${MB.esc(pack.added)}</td></tr>
-            <tr><td>${MB.t('updated')}</td><td>${MB.esc(pack.updated)}</td></tr>
+            <tr><td>${MB.t('added')}</td><td>${MB.esc(MB.fmtDateTime(pack.added))}</td></tr>
+            <tr><td>${MB.t('updated')}</td><td>${MB.esc(MB.fmtDateTime(pack.updated))}</td></tr>
           </table>
         </section>
         ${versionRows ? `

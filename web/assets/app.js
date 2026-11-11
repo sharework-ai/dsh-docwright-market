@@ -39,6 +39,10 @@ window.MB = (() => {
       status: 'Status',
       refresh: 'Refresh status',
       queue: 'Pending review queue',
+      tzAuto: 'Time zone: browser default',
+      'tz_Asia/Shanghai': 'China Standard Time (zh-CN)',
+      'tz_Europe/London': 'UK time (en-GB)',
+      'tz_America/New_York': 'US Eastern time (en-US)',
       history: 'Review history',
       emptyHistory: 'No decided reviews yet.',
       filter_all: 'All',
@@ -160,6 +164,10 @@ window.MB = (() => {
       status: '状态',
       refresh: '刷新状态',
       queue: '待审核队列',
+      tzAuto: '时区：跟随浏览器',
+      'tz_Asia/Shanghai': '中国标准时间（中文格式）',
+      'tz_Europe/London': '英国时间（英文格式）',
+      'tz_America/New_York': '美国东部时间（英文格式）',
       history: '审核历史',
       emptyHistory: '还没有审核记录。',
       filter_all: '全部',
@@ -256,6 +264,37 @@ window.MB = (() => {
     localStorage.setItem('dw-market-lang', l)
     applyI18n()
   }
+
+  // ---- date & time formatting --------------------------------------------
+  // A few typical timezones with their pairing locales; "auto" follows the
+  // browser. The choice persists in localStorage and re-renders the page.
+  const TIME_ZONES = [
+    { id: 'auto', localeTag: null, timeZone: null },
+    { id: 'Asia/Shanghai', localeTag: 'zh-CN', timeZone: 'Asia/Shanghai' },
+    { id: 'Europe/London', localeTag: 'en-GB', timeZone: 'Europe/London' },
+    { id: 'America/New_York', localeTag: 'en-US', timeZone: 'America/New_York' },
+  ]
+  function timeZoneId() {
+    const saved = localStorage.getItem('dw-market-tz')
+    return TIME_ZONES.some(tz => tz.id === saved) ? saved : 'auto'
+  }
+  function setTimeZone(id) {
+    if (!TIME_ZONES.some(tz => tz.id === id)) return
+    localStorage.setItem('dw-market-tz', id)
+    // Pages render dates inline at fetch time; a reload is the cheapest way
+    // to re-render everything with the new zone.
+    location.reload()
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return '—'
+    const tz = TIME_ZONES.find(t => t.id === timeZoneId())
+    const locale = tz.localeTag ?? (lang() === 'zh' ? 'zh-CN' : navigator.language || 'en')
+    const options = { dateStyle: 'medium', timeStyle: 'short' }
+    if (tz.timeZone) options.timeZone = tz.timeZone
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return iso
+    return new Intl.DateTimeFormat(locale, options).format(date)
+  }
   function t(key) {
     return I18N[lang()][key] ?? I18N.en[key] ?? key
   }
@@ -268,6 +307,8 @@ window.MB = (() => {
     })
     const btn = document.getElementById('lang-btn')
     if (btn) btn.textContent = lang() === 'zh' ? 'EN' : '中文'
+    const tzSel = document.getElementById('tz-select')
+    if (tzSel) tzSel.value = timeZoneId()
   }
 
   async function loadConfig() {
@@ -311,10 +352,17 @@ window.MB = (() => {
         <a href="/admin.html" data-i18n="admin" class="hidden" id="nav-admin"></a>
         <span class="spacer"></span>
         <span id="auth-slot"></span>
+        <select id="tz-select" class="lang-btn" title="date & time zone" style="cursor:pointer"></select>
         <button id="lang-btn" class="lang-btn" title="switch language"></button>
       </nav>`
     document.body.prepend(el)
     el.querySelector('#lang-btn').addEventListener('click', () => setLang(lang() === 'zh' ? 'en' : 'zh'))
+    const tzSel = el.querySelector('#tz-select')
+    tzSel.innerHTML = TIME_ZONES.map(tz =>
+      `<option value="${tz.id}">${tz.id === 'auto' ? t('tzAuto') : t('tz_' + tz.id)}</option>`
+    ).join('')
+    tzSel.value = timeZoneId()
+    tzSel.addEventListener('change', () => setTimeZone(tzSel.value))
     applyI18n()
     refreshAuthSlot()
   }
@@ -355,5 +403,5 @@ window.MB = (() => {
     return div.innerHTML
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, get supabase() { return supabase } }
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, get supabase() { return supabase } }
 })()

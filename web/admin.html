@@ -118,7 +118,7 @@
           <tbody>
           ${historyRows.map(r => `
             <tr style="border-bottom:1px solid var(--border,#eee)">
-              <td style="padding:.4rem .5rem">${MB.esc((r.reviewedAt || r.createdAt || '').replace('T', ' '))}</td>
+              <td style="padding:.4rem .5rem">${MB.esc(MB.fmtDateTime(r.reviewedAt || r.createdAt))}</td>
               <td style="padding:.4rem .5rem">${statusChip(r.status)}</td>
               <td style="padding:.4rem .5rem"><span class="chip ${r.kind === 'suite' ? 'active' : ''}">${MB.t(r.kind === 'suite' ? 'kindSuite' : 'kindPack')}</span> ${MB.esc(r.packName)}</td>
               <td style="padding:.4rem .5rem">${MB.esc(r.version)}</td>

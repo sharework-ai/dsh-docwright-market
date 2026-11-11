@@ -42,7 +42,7 @@
           <table class="kv">
             <tr><td>${MB.t('category')}</td><td>${MB.esc(suite.category)}</td></tr>
             <tr><td>${MB.t('author')}</td><td>${MB.esc(suite.author)}</td></tr>
-            <tr><td>${MB.t('updated')}</td><td>${MB.esc(suite.updated)}</td></tr>
+            <tr><td>${MB.t('updated')}</td><td>${MB.esc(MB.fmtDateTime(suite.updated))}</td></tr>
           </table>
         </section>
         <section class="block">
