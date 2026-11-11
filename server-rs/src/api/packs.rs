@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use chrono::{DateTime, Utc};
@@ -45,13 +45,57 @@ const PACK_COLUMNS: &str = "name, version, description, category, author, author
      homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
      content_hash, tarball_path, tarball_sha256, org, status, added, updated";
 
-/// GET /api/packs — the browser list page.
-pub async fn list(State(state): State<Arc<AppState>>) -> Result<Json<Value>, AppError> {
-    let rows: Vec<PackRow> = sqlx::query_as::<_, PackRow>(
-        &format!("select {PACK_COLUMNS} from packs where status = 'active' order by name"),
-    )
-    .fetch_all(&state.db)
-    .await?;
+/// GET /api/packs — the browser list page; `?q=word word` turns it into the
+/// keyword search the doc_market_search tool drives (traditional matching —
+/// every term must hit (AND), any field counts (OR): name, category, and
+/// both description languages via ILIKE; parameter binding keeps the terms
+/// literal). The catalog is small; vectors and FTS are deliberately not
+/// involved — the CALLER (the model) decomposes intent into keywords.
+#[derive(serde::Deserialize)]
+pub struct ListQuery {
+    q: Option<String>,
+}
+
+pub async fn list(
+    State(state): State<Arc<AppState>>,
+    Query(list_query): Query<ListQuery>,
+) -> Result<Json<Value>, AppError> {
+    let terms: Vec<String> = list_query
+        .q
+        .as_deref()
+        .unwrap_or("")
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+    let rows: Vec<PackRow> = if terms.is_empty() {
+        sqlx::query_as::<_, PackRow>(
+            &format!("select {PACK_COLUMNS} from packs where status = 'active' order by name"),
+        )
+        .fetch_all(&state.db)
+        .await?
+    } else {
+        // The OR of fields per term, the AND across terms. Patterns are bound
+        // parameters built from the raw terms (%term%) — no user text enters
+        // the SQL string itself.
+        let mut where_parts: Vec<String> = Vec::new();
+        let mut params: Vec<String> = Vec::new();
+        for term in &terms {
+            params.push(format!("%{}%", term.to_lowercase()));
+            let idx = params.len();
+            where_parts.push(format!(
+                "(name ilike ${idx} or category ilike ${idx} or description->>'en' ilike ${idx} or description->>'zh' ilike ${idx})"
+            ));
+        }
+        let sql = format!(
+            "select {PACK_COLUMNS} from packs where status = 'active' and {} order by name limit 50",
+            where_parts.join(" and ")
+        );
+        let mut query = sqlx::query_as::<_, PackRow>(&sql);
+        for param in &params {
+            query = query.bind(param);
+        }
+        query.fetch_all(&state.db).await?
+    };
     Ok(Json(json!({
         "ok": true,
         "packs": rows.iter().map(|r| pack_json(r)).collect::<Vec<_>>(),
