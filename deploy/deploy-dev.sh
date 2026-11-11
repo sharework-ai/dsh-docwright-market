@@ -41,7 +41,7 @@ SQL
 # Migrations run as postgres with search_path pinned to the dev schema
 # (0000_auth_stub is plain-Postgres-only and fails loud on real supabase —
 # skip it, auth is the shared GoTrue).
-for f in 0001_init.sql 0002_org_versions.sql; do
+for f in 0001_init.sql 0002_org_versions.sql 0003_suites.sql; do
   echo "== migrating $f -> market_dev"
   kubectl -n supabase exec -i supabase-postgres-0 -- env \
     PGPASSWORD="$(get_secret supabase-postgres-auth password)" \
