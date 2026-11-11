@@ -91,8 +91,11 @@ scenario_builtin_collision() {
   seed_admin_profile "$LAST_USER_ID" || return 1
   set_org "e2e-org-collision-$(date +%s)$RANDOM" || return 1
 
-  # A pack whose manifest.name collides with a docwright builtin is refused
-  # by the verifier shape check: surfaced as 200 + ok:false, nothing stored.
+  # A submission whose archive directory name disagrees with its manifest.name
+  # is refused by the verifier shape check: surfaced as 200 + ok:false with
+  # the offending rule named, nothing stored. (The builtin-collision rule was
+  # dropped on purpose — commit 3679316, zero-builtin world — so names are
+  # free; the shape gate is what this scenario actually pins.)
   local dir="$T/collision-pack"
   mkdir -p "$dir/task-card-collision"
   echo '{"name":"cosmic-func","version":"0.1.0","description":{"en":"x"}}' \
@@ -102,7 +105,7 @@ scenario_builtin_collision() {
   local res
   res="$(curl -sf -m 120 "$MARKET/api/submissions" -H "Authorization: Bearer $LAST_TOKEN" \
     -F "archive=@$T/collision.tgz" -F "author=intruder" -F "category=dev" -F "license=MIT")"
-  assert_contains "$res" '"ok":false' "builtin-name collision is refused" || return 1
-  assert_contains "$res" 'collides with a docwright built-in' "refusal names the collision rule" || return 1
+  assert_contains "$res" '"ok":false' "malformed submission is refused" || return 1
+  assert_contains "$res" 'must equal manifest.name' "refusal names the dir-mismatch rule" || return 1
   echo "  builtin-name collision refused, nothing stored"
 }
