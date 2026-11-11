@@ -54,9 +54,9 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA market_dev TO market_d
 GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA market_dev TO market_dev;
 ALTER DEFAULT PRIVILEGES IN SCHEMA market_dev GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO market_dev;
 ALTER DEFAULT PRIVILEGES IN SCHEMA market_dev GRANT USAGE,SELECT ON SEQUENCES TO market_dev;
-INSERT INTO market_dev.profiles (id, is_admin, display_name)
-SELECT id, is_admin, display_name FROM public.profiles
-ON CONFLICT (id) DO UPDATE SET is_admin = EXCLUDED.is_admin, display_name = EXCLUDED.display_name;
+INSERT INTO market_dev.profiles (id, is_admin, display_name, org)
+SELECT id, is_admin, display_name, org FROM public.profiles
+ON CONFLICT (id) DO UPDATE SET is_admin = EXCLUDED.is_admin, display_name = EXCLUDED.display_name, org = EXCLUDED.org;
 SQL
 
 # ---- secret: dev credentials + cluster-internal endpoints ----
