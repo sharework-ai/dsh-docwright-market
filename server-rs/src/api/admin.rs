@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use chrono::{DateTime, Utc};
@@ -72,6 +72,71 @@ pub async fn queue(
             "homepage": r.homepage,
             "kind": r.kind,
             "suiteMeta": r.suite_meta,
+            "createdAt": r.created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+/// GET /api/admin/reviews — the review HISTORY: decided submissions
+/// (approved/rejected), newest first, with the reviewer stamp. `status` query
+/// param filters ("approved" | "rejected", default: both). The pending queue
+/// lives at /api/admin/queue — this is the audit view of what was decided.
+pub async fn reviews(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Value>, AppError> {
+    require_admin(&state, &headers).await?;
+    let status_filter = params.get("status").map(String::as_str);
+    if !matches!(status_filter, None | Some("approved") | Some("rejected")) {
+        return Err(AppError::bad_request(
+            "status must be \"approved\" or \"rejected\" (omit it for both)",
+        ));
+    }
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: Uuid,
+        pack_name: String,
+        version: String,
+        kind: String,
+        status: String,
+        review_note: Option<String>,
+        reviewed_at: Option<DateTime<Utc>>,
+        reviewer: Option<String>,
+        uploader: Option<String>,
+        created_at: DateTime<Utc>,
+    }
+    let where_clause = match status_filter {
+        Some(s) => format!("and s.status = '{s}'"),
+        None => String::new(),
+    };
+    // status is whitelisted above, so interpolating it is safe.
+    // NOTE: no join to auth.users here — the dev market's role has no auth
+    // schema grant (prod's superuser would hide that). Uploader and reviewer
+    // both come from profiles via the role's search_path (market_dev | public).
+    let rows: Vec<Row> = sqlx::query_as(&format!(
+        "select s.id, s.pack_name, s.version, s.kind, s.status, s.review_note, \
+         s.reviewed_at, reviewer.display_name as reviewer, uploader.display_name as uploader, s.created_at \
+         from submissions s \
+         left join profiles uploader on uploader.id = s.uploader \
+         left join profiles reviewer on reviewer.id = s.reviewed_by \
+         where s.status in ('approved', 'rejected') {where_clause} \
+         order by s.reviewed_at desc nulls last, s.created_at desc limit 200"
+    ))
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(json!({
+        "ok": true,
+        "reviews": rows.into_iter().map(|r| json!({
+            "id": r.id,
+            "packName": r.pack_name,
+            "version": r.version,
+            "kind": r.kind,
+            "status": r.status,
+            "reviewNote": r.review_note,
+            "reviewedAt": r.reviewed_at.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+            "reviewer": r.reviewer,
+            "uploader": r.uploader,
             "createdAt": r.created_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         })).collect::<Vec<_>>(),
     })))

@@ -404,6 +404,101 @@ async fn queue_lists_pending_for_admin_only(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../supabase/migrations")]
+async fn review_history_lists_decided_submissions_for_admins_only(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    let admin = Uuid::new_v4();
+    seed_user(&pool, author).await;
+    seed_user(&pool, admin).await;
+    sqlx::query("insert into profiles (id, is_admin, display_name) values ($1, true, 'The Reviewer')")
+        .bind(admin)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let approved_id = Uuid::new_v4();
+    let rejected_id = Uuid::new_v4();
+    let pending_id = Uuid::new_v4();
+    seed_submission(&pool, approved_id, "history-approved", "1.0.0", author, "approved").await;
+    seed_submission(&pool, rejected_id, "history-rejected", "1.0.0", author, "rejected").await;
+    seed_submission(&pool, pending_id, "history-pending", "1.0.0", author, "pending").await;
+    sqlx::query(
+        "update submissions set review_note = 'looks good', reviewed_by = $1, \
+         reviewed_at = now() where id = $2",
+    )
+    .bind(admin)
+    .bind(approved_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let (supabase, verifier) = start_mocks(author, admin, author, true).await;
+    let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
+    let admin_headers = [("authorization", format!("Bearer {TOK_ADMIN}"))];
+
+    // Both decided rows, pending excluded, newest first with reviewer stamp.
+    let all = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder()
+            .uri("/api/admin/reviews")
+            .header("authorization", format!("Bearer {TOK_ADMIN}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(all.status(), StatusCode::OK);
+    let payload = json_body(all).await;
+    let rows = payload["reviews"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "pending rows stay out of the history: {payload}");
+    // Newest decision first: the approved row carries a reviewed_at stamp,
+    // the rejected one was seeded without one (nulls last).
+    assert_eq!(rows[0]["packName"], "history-approved");
+    assert_eq!(rows[0]["reviewer"], "The Reviewer");
+    assert_eq!(rows[0]["reviewNote"], "looks good");
+    assert_eq!(rows[1]["packName"], "history-rejected");
+    assert!(rows.iter().all(|r| r["status"] != "pending"));
+
+    // Status filter narrows to one kind of decision.
+    let approved_only = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder()
+            .uri("/api/admin/reviews?status=approved")
+            .header("authorization", format!("Bearer {TOK_ADMIN}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let filtered = json_body(approved_only).await;
+    assert_eq!(filtered["reviews"].as_array().unwrap().len(), 1);
+    assert_eq!(filtered["reviews"][0]["status"], "approved");
+
+    // Unknown status → loud refusal; non-admin → forbidden.
+    let bad = tower::ServiceExt::oneshot(
+        app.clone(),
+        Request::builder()
+            .uri("/api/admin/reviews?status=pending")
+            .header("authorization", format!("Bearer {TOK_ADMIN}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    let stranger = tower::ServiceExt::oneshot(
+        app,
+        Request::builder()
+            .uri("/api/admin/reviews")
+            .header("authorization", format!("Bearer {TOK_STRANGER}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(stranger.status(), StatusCode::FORBIDDEN);
+}
+
+#[sqlx::test(migrations = "../supabase/migrations")]
 async fn rejected_submission_is_archived_with_a_note(pool: PgPool) {
     init_log();
     let author = Uuid::new_v4();

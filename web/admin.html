@@ -17,6 +17,8 @@
       <p class="muted" style="font-size:0.82rem">Reviewing requires an admin profile (profiles.is_admin). <span lang="zh">审核页需要管理员账号(profiles.is_admin)。</span></p>
     </div>
     <div id="queue" class="hidden"></div>
+    <h2 data-i18n="history" style="margin-top:2rem" class="hidden" id="history-title"></h2>
+    <div id="history" class="hidden"></div>
   </main>
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
@@ -42,6 +44,7 @@
       if (!s) return
       document.getElementById('auth-box').classList.add('hidden')
       document.getElementById('queue').classList.remove('hidden')
+      loadHistory()
       const { queue } = await MB.api('/api/admin/queue', { auth: true })
       const el = document.getElementById('queue')
       if (!queue.length) {
@@ -83,6 +86,51 @@
           body: { action: btn.dataset.action, note: note || null },
         })
         load()
+      }))
+    }
+
+    // Review history: every decided submission, newest first. Filter buttons
+    // re-fetch; reload() re-renders the table from the cached rows.
+    let historyRows = []
+    let historyFilter = 'all'
+    async function loadHistory() {
+      const { reviews } = await MB.api(`/api/admin/reviews${historyFilter === 'all' ? '' : `?status=${historyFilter}`}`, { auth: true })
+      historyRows = reviews
+      renderHistory()
+    }
+    function renderHistory() {
+      const title = document.getElementById('history-title')
+      const el = document.getElementById('history')
+      title.classList.remove('hidden')
+      el.classList.remove('hidden')
+      const filters = ['all', 'approved', 'rejected']
+      const statusChip = s => `<span class="chip ${s === 'approved' ? 'active' : ''}">${MB.t(s)}</span>`
+      el.innerHTML = `
+        <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
+          ${filters.map(f => `<button class="${f === historyFilter ? 'primary' : ''}" data-filter="${f}">${MB.t('filter_' + f)}</button>`).join('')}
+        </div>
+        ${!historyRows.length ? `<p class="muted" data-i18n="emptyHistory"></p>` : `
+        <table style="width:100%;border-collapse:collapse;font-size:.9rem">
+          <thead><tr style="text-align:left;border-bottom:1px solid var(--border,#ddd)">
+            <th data-i18n="th_time"></th><th data-i18n="status"></th><th data-i18n="th_target"></th>
+            <th data-i18n="version"></th><th data-i18n="th_reviewer"></th><th data-i18n="note"></th>
+          </tr></thead>
+          <tbody>
+          ${historyRows.map(r => `
+            <tr style="border-bottom:1px solid var(--border,#eee)">
+              <td style="padding:.4rem .5rem">${MB.esc((r.reviewedAt || r.createdAt || '').replace('T', ' '))}</td>
+              <td style="padding:.4rem .5rem">${statusChip(r.status)}</td>
+              <td style="padding:.4rem .5rem"><span class="chip ${r.kind === 'suite' ? 'active' : ''}">${MB.t(r.kind === 'suite' ? 'kindSuite' : 'kindPack')}</span> ${MB.esc(r.packName)}</td>
+              <td style="padding:.4rem .5rem">${MB.esc(r.version)}</td>
+              <td style="padding:.4rem .5rem">${MB.esc(r.reviewer || '—')}</td>
+              <td style="padding:.4rem .5rem">${MB.esc(r.reviewNote || '—')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`}`
+      MB.applyI18n()
+      el.querySelectorAll('button[data-filter]').forEach(btn => btn.addEventListener('click', () => {
+        historyFilter = btn.dataset.filter
+        loadHistory().catch(() => renderHistory())
       }))
     }
 

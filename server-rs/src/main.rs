@@ -95,6 +95,7 @@ pub(crate) fn build_router(state: Arc<AppState>, web_dir: &str) -> Router {
         .route("/api/suites/{name}", get(api::suites::suite_detail))
         .route("/tarballs/{file}", get(api::packs::tarball))
         .route("/api/admin/queue", get(api::admin::queue))
+        .route("/api/admin/reviews", get(api::admin::reviews))
         .route("/api/admin/review/{id}", post(api::admin::review))
         .fallback_service(
             ServeDir::new(web_dir).append_index_html_on_directories(true),
