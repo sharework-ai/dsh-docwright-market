@@ -189,7 +189,10 @@ pub async fn tarball(
     {
         return Err(AppError::bad_request("malformed tarball name"));
     }
-    let object_path = format!("tarballs/{file}");
+    // The stored path carries the bucket context ("<bucket>/<file>"); derive
+    // the prefix from the SAME env-backed bucket name the publish path wrote,
+    // so a deployment with renamed buckets (dev) matches its own rows.
+    let object_path = format!("{}/{}", storage::bucket_tarballs(), file);
     let hit: Option<(String,)> = sqlx::query_as(
         "select p.status from pack_versions v join packs p on p.name = v.name \
          where v.tarball_path = $1",
@@ -248,7 +251,7 @@ async fn versions_json(state: &AppState, name: &str) -> Result<Vec<Value>, AppEr
         .map(|v| {
             json!({
                 "version": v.version,
-                "tarball": format!("/{}", v.tarball_path),
+                "tarball": format!("/tarballs/{}", v.tarball_path.rsplit('/').next().unwrap_or(&v.tarball_path)),
                 "tarballSha256": v.tarball_sha256,
                 "contentHash": v.content_hash,
                 "hasFunctionRules": v.has_function_rules,

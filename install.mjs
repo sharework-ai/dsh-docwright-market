@@ -144,14 +144,14 @@ async function closureFor(request) {
       die(`pack "${request}" consumes "${n}" (via ${requester ?? request}), but it is neither in the index nor installed (try --list)`)
     }
     for (const up of entry.consumes ?? []) await visit(up, n)
-    order.push({ request: n, version: n === name ? version : undefined, entry })
+    order.push({ request: n, version: n === name ? version : undefined, entry, explicit: n === name })
   }
   await visit(name)
   return order
 }
 
 const targets = all
-  ? index.packs.map(p => ({ request: p.name, version: undefined, entry: p }))
+  ? index.packs.map(p => ({ request: p.name, version: undefined, entry: p, explicit: true }))
   : await (async () => {
       const expanded = []
       for (const request of wanted) expanded.push(...await closureFor(request))
@@ -159,7 +159,8 @@ const targets = all
     })()
 const installed = []
 
-for (const { request, version, entry } of targets) {
+for (const target of targets) {
+  const { request, version, entry } = target;
   const name = request
 
   // Resolve the install source: top-level fields are the latest version; a
@@ -176,11 +177,29 @@ for (const { request, version, entry } of targets) {
   }
 
   const dest = path.join(into, name)
+  const explicit = target?.explicit ?? true
   if (!force) {
     try {
       await fs.access(dest)
-      die(`"${name}" already exists at ${dest} — pass --force to overwrite`, 3)
-    } catch { /* not installed yet: good */ }
+      if (!explicit) {
+        // A closure member: satisfied at the same version skips; an older
+        // one updates in place — the chain is meant to land as a whole.
+        let have = ''
+        try {
+          have = JSON.parse(await fs.readFile(path.join(dest, 'manifest.json'), 'utf8')).version ?? ''
+        } catch { /* treat as absent */ }
+        if (have === src.version) {
+          console.log(`skip ${name}@${src.version} (already current)`)
+          continue
+        }
+        console.log(`update ${name}: ${have || '(unreadable)'} -> ${src.version}`)
+      } else {
+        die(`"${name}" already exists at ${dest} — pass --force to overwrite`, 3)
+      }
+    } catch (e) {
+      if (e?.code === 3 || e?.message?.includes('pass --force')) throw e
+      /* not installed yet: good */
+    }
   }
 
   const url = refFor(src.tarball)
