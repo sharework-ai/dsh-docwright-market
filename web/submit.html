@@ -27,6 +27,11 @@
       <div id="org-gate" class="notice info hidden">
         <span data-i18n="orgGate"></span> <a href="/account.html" data-i18n="account"></a>
       </div>
+      <div class="meta" style="margin-bottom:0.8rem">
+        <button id="tab-pack" class="primary" data-i18n="tabPack"></button>
+        <button id="tab-suite" class="secondary" data-i18n="tabSuite"></button>
+      </div>
+      <p id="suite-hint" class="muted hidden" style="font-size:0.85rem" data-i18n="suiteSubmitHint"></p>
       <form id="submit-form">
         <label class="field"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
         <label class="field"><span data-i18n="author"></span><input id="author" required></label>
@@ -52,6 +57,25 @@
         <label class="field"><span data-i18n="homepage"></span><input id="homepage" type="url" placeholder="https://…"></label>
         <button class="primary" type="submit" id="btn-send" data-i18n="send"></button>
       </form>
+      <form id="suite-form" class="hidden">
+        <label class="field"><span data-i18n="suiteName"></span><input id="su-name" placeholder="cosmic" required></label>
+        <label class="field"><span data-i18n="suiteDescEn"></span><input id="su-desc-en" required></label>
+        <label class="field"><span data-i18n="suiteDescZh"></span><input id="su-desc-zh"></label>
+        <label class="field"><span data-i18n="suiteVersion"></span><input id="su-version" placeholder="1.0.0" required></label>
+        <label class="field"><span data-i18n="category"></span>
+          <select id="su-category">
+            <option value="estimation" selected>estimation</option>
+            <option value="dev">dev</option>
+            <option value="pm">pm</option>
+            <option value="test">test</option>
+            <option value="docs">docs</option>
+            <option value="other">other</option>
+          </select>
+        </label>
+        <label class="field"><span data-i18n="suiteMembers"></span><input id="su-members" placeholder="cosmic-context cosmic-plan cosmic-req" required></label>
+        <p class="muted" style="font-size:0.82rem" data-i18n="suiteMembersHint"></p>
+        <button class="primary" type="submit" id="btn-suite-send" data-i18n="createSuite"></button>
+      </form>
       <div id="result"></div>
     </div>
   </main>
@@ -72,10 +96,28 @@
       const gated = !account?.org
       document.getElementById('org-gate').classList.toggle('hidden', !gated)
       document.getElementById('submit-form').classList.toggle('hidden', gated)
+      document.getElementById('suite-form').classList.toggle('hidden', gated)
       if (account?.org && !document.getElementById('author').value) {
         document.getElementById('author').value = account.org
       }
     }
+
+    // Two submission modes: PACK (upload a verified tarball) and SUITE (a
+    // form — a suite is pure metadata, there is NO archive to upload; the
+    // members must already be published packs). Both land in the SAME review
+    // queue; pack.html's 我的管理 section tracks either kind's status.
+    let mode = 'pack'
+    function setMode(next) {
+      mode = next
+      document.getElementById('tab-pack').className = mode === 'pack' ? 'primary' : 'secondary'
+      document.getElementById('tab-suite').className = mode === 'suite' ? 'primary' : 'secondary'
+      document.getElementById('submit-form').classList.toggle('hidden', mode !== 'pack')
+      document.getElementById('suite-form').classList.toggle('hidden', mode !== 'suite')
+      document.getElementById('suite-hint').classList.toggle('hidden', mode !== 'suite')
+      document.getElementById('result').innerHTML = ''
+    }
+    document.getElementById('tab-pack').addEventListener('click', () => setMode('pack'))
+    document.getElementById('tab-suite').addEventListener('click', () => setMode('suite'))
 
     // Empty credentials reach GoTrue as an anonymous signup and die with
     // "Anonymous sign-ins are disabled" — validate before calling.
@@ -142,6 +184,45 @@
       } finally {
         btn.disabled = false
         btn.textContent = MB.t('send')
+      }
+    })
+
+    // SUITE submit: members are whitespace/comma separated pack names; the
+    // server validates each against the packs table before queueing.
+    document.getElementById('suite-form').addEventListener('submit', async event => {
+      event.preventDefault()
+      const result = document.getElementById('result')
+      const btn = document.getElementById('btn-suite-send')
+      const members = document.getElementById('su-members').value.split(/[\s,;]+/).filter(Boolean)
+      if (!members.length) return
+      const zhDesc = document.getElementById('su-desc-zh').value.trim()
+      btn.disabled = true
+      result.innerHTML = ''
+      try {
+        const res = await MB.api('/api/my/suites', {
+          method: 'POST',
+          auth: true,
+          body: {
+            name: document.getElementById('su-name').value.trim(),
+            version: document.getElementById('su-version').value.trim(),
+            description: Object.assign(
+              { en: document.getElementById('su-desc-en').value.trim() },
+              zhDesc ? { zh: zhDesc } : {}),
+            category: document.getElementById('su-category').value,
+            members,
+          },
+        })
+        if (res.ok) {
+          result.innerHTML = `<div class="notice ok">${MB.t('suiteQueued')}</div>
+            <p><a href="/packs.html">${MB.t('trackInPacks')}</a></p>`
+          document.getElementById('suite-form').reset()
+        } else {
+          result.innerHTML = `<div class="notice bad">${MB.esc(res.error || MB.t('rejectedMachine'))}</div>`
+        }
+      } catch (e) {
+        result.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      } finally {
+        btn.disabled = false
       }
     })
 
