@@ -55,14 +55,25 @@
         </section>` : ''}
         <section class="block">
           <h2>${MB.t('install')}</h2>
-          <code class="cmd">node install.mjs ${MB.esc(pack.name)} --index ${MB.esc(location.origin)}/api/index</code>
-          <p class="muted" style="font-size:0.85rem">
-            Copies the pack into <code>./.docwright/packs/</code> (or pass <code>--into</code>), then restart the
-            dsh host and check with <code>doc_packs</code>. Pin a version with
-            <code>node install.mjs ${MB.esc(pack.name)}@0.1.0</code>.
-            <span lang="zh">拷入 <code>./.docwright/packs/</code>(可用 <code>--into</code> 指定),重启宿主后用
-            <code>doc_packs</code> 确认可见;<code>name@版本号</code> 可安装指定历史版本。</span>
+          <p class="muted" style="font-size:0.9rem">
+            In a DSH session with the docwright plugin, just ask:
+            <strong>“帮我安装 ${MB.esc(pack.name)}”</strong> (or “install ${MB.esc(pack.name)}”).
+            The model finds this pack and installs it after your confirmation — it is usable in the same
+            session, no restart.
+            <span lang="zh">在装有 docwright 插件的 DSH 会话中直接说<strong>“帮我安装 ${MB.esc(pack.name)}”</strong>即可：
+            模型会找到本包并在你确认后安装，装完当前会话立即可用，无需重启。</span>
           </p>
+          <details class="muted" style="font-size:0.85rem">
+            <summary>CLI (outside a DSH session)</summary>
+            <code class="cmd">node install.mjs ${MB.esc(pack.name)} --index ${MB.esc(location.origin)}/api/index</code>
+            <p>
+              Copies the pack into <code>./.docwright/packs/</code> (or pass <code>--into</code>), then restart the
+              dsh host and check with <code>doc_packs</code>. Pin a version with
+              <code>node install.mjs ${MB.esc(pack.name)}@0.1.0</code>.
+              <span lang="zh">拷入 <code>./.docwright/packs/</code>(可用 <code>--into</code> 指定),重启宿主后用
+              <code>doc_packs</code> 确认可见;<code>name@版本号</code> 可安装指定历史版本。</span>
+            </p>
+          </details>
           <p><a href="${MB.esc(pack.tarball)}" download>${MB.t('download')}</a></p>
         </section>
         ${health ? `
