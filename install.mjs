@@ -115,15 +115,52 @@ if (listOnly) {
   process.exit(0)
 }
 
-const targets = all ? index.packs.map(p => p.name) : wanted
-const installed = []
+// The consumes closure IS the install unit: requesting a chain pack brings
+// its transitive upstreams (deps first), so one command lands a working
+// chain. A consumes target that is neither in the index nor resolvable as a
+// builtin-merged pack fails the run before anything downloads.
+async function existsLocally(n) {
+  if (BUILTIN_PACKS.has(n)) return true
+  try {
+    await fs.access(path.join(into, n))
+    return true
+  } catch { return false }
+}
 
-for (const request of targets) {
+// Expand every request to its consumes closure (deps first; a member already
+// on disk or resolvable as builtin is satisfied and dropped).
+async function closureFor(request) {
   const at = request.lastIndexOf('@')
   const name = at > 0 ? request.slice(0, at) : request
   const version = at > 0 ? request.slice(at + 1) : undefined
-  const entry = index.packs.find(p => p.name === name)
-  if (!entry) die(`pack "${name}" not in the index (try --list)`)
+  const order = []
+  const seen = new Set()
+  const visit = async (n, requester) => {
+    if (seen.has(n)) return
+    seen.add(n)
+    const entry = index.packs.find(p => p.name === n)
+    if (!entry) {
+      if (await existsLocally(n)) return
+      die(`pack "${request}" consumes "${n}" (via ${requester ?? request}), but it is neither in the index nor installed (try --list)`)
+    }
+    for (const up of entry.consumes ?? []) await visit(up, n)
+    order.push({ request: n, version: n === name ? version : undefined, entry })
+  }
+  await visit(name)
+  return order
+}
+
+const targets = all
+  ? index.packs.map(p => ({ request: p.name, version: undefined, entry: p }))
+  : await (async () => {
+      const expanded = []
+      for (const request of wanted) expanded.push(...await closureFor(request))
+      return expanded
+    })()
+const installed = []
+
+for (const { request, version, entry } of targets) {
+  const name = request
 
   // Resolve the install source: top-level fields are the latest version; a
   // pinned request resolves through the version history (format 2). On a
@@ -200,19 +237,14 @@ for (const request of targets) {
   }
 }
 
-// Follow-ups: missing upstreams, builtin overrides, restart reminder.
+// Follow-ups: note any installed pack still consuming something unresolvable.
 const localNames = new Set(installed.map(p => p.name))
 for (const p of installed) {
   for (const up of p.consumes ?? []) {
     if (BUILTIN_PACKS.has(up) || localNames.has(up)) continue
     if (!index.packs.some(x => x.name === up)) {
       console.warn(`warning: ${p.name} consumes "${up}" which is neither built-in nor in this market`)
-      continue
     }
-    console.warn(`note: ${p.name} consumes "${up}" — install it too: node install.mjs ${up}`)
-  }
-  if (BUILTIN_PACKS.has(p.name)) {
-    console.warn(`warning: "${p.name}" overrides the docwright built-in pack of the same name`)
   }
 }
 console.log(`\nDone. Packs load when the docwright plugin applies — restart the dsh host, then check with doc_packs.

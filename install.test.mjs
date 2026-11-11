@@ -241,7 +241,7 @@ test('manifest name mismatch fails loudly (exit 2)', async () => {
 test('unknown pack is a clean failure (exit 2)', async () => {
   const r = await run(['ghost-pack', '--into', freshInto('ghost')])
   assert.equal(r.status, 2)
-  assert.match(r.stderr, /not in the index/)
+  assert.match(r.stderr, /neither in the index nor installed/)
 })
 
 // ---- format 2: org, version history, pinned installs ------------------------
