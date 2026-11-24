@@ -381,15 +381,16 @@ window.MB = (() => {
     const el = document.createElement('header')
     el.className = 'site'
     el.innerHTML = `
-      <a class="brand" href="/">docwright pack market</a>
-      <nav>
-        <a href="/" data-i18n="browse"></a>
-        <a href="/packs.html" data-i18n="packs" class="hidden" id="nav-packs"></a>
-        <a href="/admin.html" data-i18n="admin" class="hidden" id="nav-admin"></a>
-        <span class="spacer"></span>
-        <span id="auth-slot"></span>
-        <button id="lang-btn" class="lang-btn" title="switch language"></button>
-      </nav>`
+      <div class="inner">
+        <a class="brand" href="/">docwright pack market</a>
+        <nav>
+          <a href="/" data-i18n="browse"></a>
+          <a href="/packs.html" data-i18n="packs" class="hidden" id="nav-packs"></a>
+          <a href="/admin.html" data-i18n="admin" class="hidden" id="nav-admin"></a>
+          <span id="auth-slot"></span>
+          <button id="lang-btn" class="lang-btn" title="switch language"></button>
+        </nav>
+      </div>`
     document.body.prepend(el)
     el.querySelector('#lang-btn').addEventListener('click', () => setLang(lang() === 'zh' ? 'en' : 'zh'))
     applyI18n()

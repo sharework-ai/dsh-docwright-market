@@ -14,10 +14,10 @@
       <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
       <div id="auth-error"></div>
       <button id="btn-signin" class="primary" data-i18n="signIn"></button>
-      <p class="muted" style="font-size:0.82rem">Reviewing requires an admin profile (profiles.is_admin). <span lang="zh">审核页需要管理员账号(profiles.is_admin)。</span></p>
+      <p class="muted text-xs">Reviewing requires an admin profile (profiles.is_admin). <span lang="zh">审核页需要管理员账号(profiles.is_admin)。</span></p>
     </div>
     <div id="queue" class="hidden"></div>
-    <h2 data-i18n="history" style="margin-top:2rem" class="hidden" id="history-title"></h2>
+    <h2 data-i18n="history" class="mt-10 hidden" id="history-title"></h2>
     <div id="history" class="hidden"></div>
   </main>
   <script src="/vendor/supabase.js"></script>
@@ -106,24 +106,24 @@
       const filters = ['all', 'approved', 'rejected']
       const statusChip = s => `<span class="chip ${s === 'approved' ? 'active' : ''}">${MB.t(s)}</span>`
       el.innerHTML = `
-        <div style="display:flex;gap:.5rem;margin-bottom:.75rem">
-          ${filters.map(f => `<button class="${f === historyFilter ? 'primary' : ''}" data-filter="${f}">${MB.t('filter_' + f)}</button>`).join('')}
+        <div class="mb-3 flex gap-2">
+          ${filters.map(f => `<button class="${f === historyFilter ? 'primary' : 'secondary'}" data-filter="${f}">${MB.t('filter_' + f)}</button>`).join('')}
         </div>
         ${!historyRows.length ? `<p class="muted" data-i18n="emptyHistory"></p>` : `
-        <table style="width:100%;border-collapse:collapse;font-size:.9rem">
-          <thead><tr style="text-align:left;border-bottom:1px solid var(--border,#ddd)">
-            <th data-i18n="th_time"></th><th data-i18n="status"></th><th data-i18n="th_target"></th>
-            <th data-i18n="version"></th><th data-i18n="th_reviewer"></th><th data-i18n="note"></th>
+        <table class="w-full border-collapse text-sm">
+          <thead><tr class="text-left border-b border-slate-200 dark:border-slate-800">
+            <th class="py-2 pr-2" data-i18n="th_time"></th><th class="py-2 pr-2" data-i18n="status"></th><th class="py-2 pr-2" data-i18n="th_target"></th>
+            <th class="py-2 pr-2" data-i18n="version"></th><th class="py-2 pr-2" data-i18n="th_reviewer"></th><th class="py-2 pr-2" data-i18n="note"></th>
           </tr></thead>
           <tbody>
           ${historyRows.map(r => `
-            <tr style="border-bottom:1px solid var(--border,#eee)">
-              <td style="padding:.4rem .5rem">${MB.esc(MB.fmtDateTime(r.reviewedAt || r.createdAt))}</td>
-              <td style="padding:.4rem .5rem">${statusChip(r.status)}</td>
-              <td style="padding:.4rem .5rem"><span class="chip ${r.kind === 'suite' ? 'active' : ''}">${MB.t(r.kind === 'suite' ? 'kindSuite' : 'kindPack')}</span> ${MB.esc(r.packName)}</td>
-              <td style="padding:.4rem .5rem">${MB.esc(r.version)}</td>
-              <td style="padding:.4rem .5rem">${MB.esc(r.reviewer || '—')}</td>
-              <td style="padding:.4rem .5rem">${MB.esc(r.reviewNote || '—')}</td>
+            <tr class="border-b border-slate-200 dark:border-slate-800">
+              <td class="py-2 pr-2">${MB.esc(MB.fmtDateTime(r.reviewedAt || r.createdAt))}</td>
+              <td class="py-2 pr-2">${statusChip(r.status)}</td>
+              <td class="py-2 pr-2"><span class="chip ${r.kind === 'suite' ? 'active' : ''}">${MB.t(r.kind === 'suite' ? 'kindSuite' : 'kindPack')}</span> ${MB.esc(r.packName)}</td>
+              <td class="py-2 pr-2 font-mono">${MB.esc(r.version)}</td>
+              <td class="py-2 pr-2">${MB.esc(r.reviewer || '—')}</td>
+              <td class="py-2 pr-2">${MB.esc(r.reviewNote || '—')}</td>
             </tr>`).join('')}
           </tbody>
         </table>`}`

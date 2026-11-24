@@ -21,11 +21,11 @@
 
     <div id="content" class="hidden">
       <!-- org is read-only here; editing lives on the account page. -->
-      <div class="card" style="margin-bottom:1rem">
-        <div class="meta" style="margin-top:0">
+      <div class="card mb-4">
+        <div class="meta !mt-0">
           <span id="hub-org"></span>
           <a href="/account.html" class="chip" data-i18n="orgEditHint"></a>
-          <span style="flex:1"></span>
+          <span class="flex-1"></span>
           <a href="/submit.html" class="btn" data-i18n="submit"></a>
         </div>
       </div>
@@ -46,8 +46,8 @@
         <h2 data-i18n="mySuites"></h2>
         <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
         <!-- create / edit form: hidden until needed -->
-        <div id="suite-form-card" class="card hidden" style="margin-bottom:0.8rem">
-          <strong style="font-size:0.85rem" id="suite-form-title"></strong>
+        <div id="suite-form-card" class="card mb-3 hidden">
+          <strong class="text-[13px]" id="suite-form-title"></strong>
           <label class="field"><span data-i18n="suiteName"></span><input id="s-name" placeholder="cosmic"></label>
           <label class="field"><span data-i18n="suiteDescEn"></span><input id="s-desc-en"></label>
           <label class="field"><span data-i18n="suiteDescZh"></span><input id="s-desc-zh"></label>
@@ -109,7 +109,7 @@
       const acc = await MB.api('/api/account', { auth: true })
       document.getElementById('hub-org').innerHTML = acc.org
         ? `<span class="chip">org: ${MB.esc(acc.org)}</span>`
-        : `<span class="notice info" style="display:inline-block;padding:0.2rem 0.8rem">${MB.t('orgNone')}</span>`
+        : `<span class="notice info !inline-block !my-0 !py-0.5">${MB.t('orgNone')}</span>`
     }
 
     // ---- my packs -------------------------------------------------------------
@@ -123,7 +123,7 @@
       document.getElementById('my-packs-empty').classList.toggle('hidden', packs.length > 0)
       const box = document.getElementById('my-packs')
       box.innerHTML = packs.map(p => `
-        <div class="card" style="margin-bottom:0.8rem" data-pack="${MB.esc(p.name)}">
+        <div class="card mb-3" data-pack="${MB.esc(p.name)}">
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
             ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
           </h3>
@@ -169,8 +169,8 @@
       const LICENSE_WHITELIST = ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC']
       const opt = (list, selected) => list.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('')
       area.innerHTML = `
-        <div class="card" style="background:var(--bg); margin-top:0.6rem">
-          <strong style="font-size:0.85rem">${MB.t('editMeta')}</strong>
+        <div class="card mt-2 !bg-slate-50 dark:!bg-slate-950">
+          <strong class="text-[13px]">${MB.t('editMeta')}</strong>
           <label class="field"><span>${MB.t('category')}</span><select class="e-category">${opt(CATEGORY_WHITELIST, p.category)}</select></label>
           <label class="field"><span>${MB.t('license')}</span><select class="e-license">${opt(LICENSE_WHITELIST, p.license)}</select></label>
           <label class="field"><span>${MB.t('author')}</span><input class="e-author" value="${MB.esc(p.author)}"></label>
@@ -221,11 +221,11 @@
       document.getElementById('my-subs-empty').classList.toggle('hidden', submissions.length > 0)
       const box = document.getElementById('my-subs')
       box.innerHTML = submissions.map(s => `
-        <div class="card" style="margin-bottom:0.6rem">
+        <div class="card mb-2">
           <strong>${MB.esc(s.packName)}</strong>@${MB.esc(s.version)}
           ${s.kind === 'suite' ? `<span class="chip">${MB.t('kindSuite')}</span>` : ''}
           ${statusChip(s.status)}
-          <span class="muted" style="font-size:0.8rem">${MB.esc(MB.fmtDateTime(s.createdAt))}</span>
+          <span class="muted text-xs">${MB.esc(MB.fmtDateTime(s.createdAt))}</span>
           ${s.kind !== 'suite' ? `<a class="chip" href="#" data-arch="${s.id}" data-name="${MB.esc(s.packName)}" data-version="${MB.esc(s.version)}" title="download submitted archive">↓ tgz</a>` : ''}
           ${s.reviewNote ? `<div class="muted" style="font-size:0.85rem">${MB.esc(s.reviewNote)}</div>` : ''}
           ${s.status === 'pending'
@@ -340,7 +340,7 @@
       document.getElementById('my-suites-empty').classList.toggle('hidden', suites.length > 0)
       const box = document.getElementById('my-suites')
       box.innerHTML = suites.map(st => `
-        <div class="card" style="margin-bottom:0.8rem" data-suite="${MB.esc(st.name)}">
+        <div class="card mb-3" data-suite="${MB.esc(st.name)}">
           <h3><a href="/suite.html?name=${encodeURIComponent(st.name)}">${MB.esc(st.name)}</a>@${MB.esc(st.version)}
             ${st.enabled === false ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
           </h3>

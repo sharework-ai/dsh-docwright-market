@@ -58,3 +58,8 @@ podman run --rm --userns=keep-id -v "$PWD":/workspace -w /workspace/server-rs \
 - **测试里 spawnSync 会死锁进程内假 server**(子进程 fetch 等父进程事件循环)——install.test.mjs 用异步 spawn。
 - **vitest 3.2.7 静默忽略 config 文件的 coverage 段**:覆盖率门走 package.json `test:coverage` 的 CLI 参数(见 vitest.config.mjs 注释)。
 - **k3s 部署:podman 的镜像 store 与 k3s containerd 不互通**,build.sh 末尾 save + `k3s ctr images import`;kubelet 不认手工导入镜像的某些情况时用 `~/projects/commons/supabase/pre-pull.sh` 思路。
+
+## Design System
+Read DESIGN.md before visual or UI work: it defines the fonts, colors, spacing, and
+aesthetic direction. Ask the user before departing from it. When reviewing or QA-ing
+UI, flag code that doesn't match DESIGN.md.

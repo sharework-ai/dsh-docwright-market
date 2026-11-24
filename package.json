@@ -6,10 +6,13 @@
   "scripts": {
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.all=false --coverage.include='verifier/index.mjs' --coverage.thresholds.lines=85 --coverage.thresholds.functions=85 --coverage.thresholds.statements=85 --coverage.thresholds.branches=75",
-    "test:rust": "bash scripts/test.sh --rust-only"
+    "test:rust": "bash scripts/test.sh --rust-only",
+    "build:css": "tailwindcss -i web/src/app.css -o web/assets/style.css --minify"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
     "@vitest/coverage-v8": "^3.2.4",
+    "tailwindcss": "^4.3.5",
     "vitest": "^3.2.4"
   }
 }

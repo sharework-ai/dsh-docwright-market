@@ -1,0 +1,177 @@
+/* docwright pack market — Tailwind v4 source.
+   Compiled to ../assets/style.css at build time (npm run build:css).
+   DESIGN.md is the source of truth for tokens and rules. */
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #155dfc;        /* blue-600 — action & confirmation */
+  --color-primary-hover: #1447e6;  /* blue-700 */
+  --color-accent: #2b7fff;         /* blue-500 — hero glow / dark-mode action */
+  --color-accent-strong: #51a2ff;  /* blue-400 — gradient end, dark hover */
+  --color-warning: #fe9a37;        /* amber-500 — pending-review process color */
+  --color-warning-ink: #e1712b;    /* amber-600 */
+  --color-danger: #dc2626;
+  --font-display: "Cabinet Grotesk", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", sans-serif;
+  --font-sans: "General Sans", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+@layer base {
+  @font-face {
+    font-family: "Cabinet Grotesk";
+    src: url("/assets/fonts/cabinet-grotesk-800.woff2") format("woff2");
+    font-weight: 800; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "General Sans";
+    src: url("/assets/fonts/general-sans-400.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "General Sans";
+    src: url("/assets/fonts/general-sans-600.woff2") format("woff2");
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: url("/assets/fonts/jetbrains-mono-400.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: url("/assets/fonts/jetbrains-mono-600.woff2") format("woff2");
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+    line-height: 1.55;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { @apply bg-slate-950 text-slate-100; }
+  }
+  h1, h2, h3 { @apply font-display tracking-tight; }
+}
+
+@layer components {
+  /* ---- shared vocabulary: JS templates inject these class names ---- */
+  .hidden { display: none !important; }
+  .muted { @apply text-slate-500 dark:text-slate-400; }
+
+  .site { @apply w-full; }
+  header.site {
+    @apply sticky top-0 z-20 border-b border-slate-200 bg-slate-50/85 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85;
+  }
+  header.site .inner { @apply mx-auto flex h-14 max-w-5xl flex-wrap items-center gap-5 px-5; }
+  header.site .brand { @apply flex items-center gap-2 text-[15px] font-semibold text-slate-900 no-underline dark:text-slate-100; }
+  header.site .brand::before { content: ""; @apply block h-2.5 w-2.5 rounded-[3px] bg-primary; }
+  header.site nav { @apply ml-auto flex flex-wrap items-center gap-4 text-sm font-medium; }
+  header.site nav a { @apply text-slate-500 no-underline hover:text-primary dark:text-slate-400; }
+  header.site .spacer { @apply hidden; }
+  header.site .auth-email { @apply font-semibold text-slate-900 dark:text-slate-100; }
+  .lang-btn { @apply cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1 text-[13px] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100; }
+
+  footer.site { @apply border-t border-slate-200 py-8 text-center text-[12.5px] text-slate-500 dark:border-slate-800 dark:text-slate-400; }
+  main { @apply mx-auto max-w-5xl px-5 pb-16 pt-8; }
+
+  h1 { @apply mt-1 mb-4 text-3xl font-extrabold sm:text-4xl; }
+  h2 { @apply text-xl font-bold sm:text-2xl; }
+  section.block { @apply my-8; }
+
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white p-5 transition duration-150
+      hover:-translate-y-0.5 hover:border-blue-200
+      dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-900;
+  }
+  .card h3 { @apply mb-1 text-[15px] font-semibold; }
+  .card h3 a { @apply text-slate-900 no-underline dark:text-slate-100; }
+  .card .desc { @apply mb-3 min-h-14 text-[13.5px] text-slate-500 dark:text-slate-400; }
+  /* suite cards: blue-tinted surface, border-only treatment (no overlay) */
+  .card.suite {
+    @apply border-blue-200 bg-gradient-to-b from-blue-50 to-white
+      dark:border-blue-900 dark:from-slate-900 dark:to-slate-900;
+  }
+  .card.suite .suite-chip { @apply border-blue-300 bg-blue-50 text-primary dark:border-blue-800 dark:bg-blue-950 dark:text-accent-strong; }
+
+  .meta { @apply mt-2 flex flex-wrap gap-1.5; }
+  .grid { @apply grid gap-4; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .chips { @apply my-3 mb-6 flex flex-wrap gap-2; }
+  .chip, .badge {
+    @apply inline-block rounded-full border border-slate-200 bg-white px-3 py-0.5 font-mono text-xs text-slate-500
+      dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400;
+  }
+  .chip.active { @apply border-primary bg-primary text-white dark:border-accent dark:bg-accent dark:text-white; }
+  .badge.code { @apply border-warning-ink bg-amber-50 text-warning-ink dark:border-warning dark:bg-amber-950/40 dark:text-warning; }
+  a.chip { @apply no-underline hover:border-primary hover:text-primary dark:hover:border-accent dark:hover:text-accent-strong; }
+
+  .search {
+    @apply w-full max-w-xl rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition
+      placeholder:text-slate-400 focus:border-primary focus:ring-[3px] focus:ring-primary/20
+      dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  }
+
+  /* terminal blocks: fixed dark surface in both modes (DESIGN.md) */
+  pre.sheet {
+    @apply my-3 overflow-auto rounded-[10px] bg-slate-900 p-4 font-mono text-[12.5px] leading-relaxed text-slate-300;
+  }
+  pre.warn { @apply border border-danger/60; }
+  .cmd { @apply my-2 block overflow-auto rounded-lg bg-slate-900 px-4 py-2.5 font-mono text-[13px] text-slate-300; }
+
+  button.primary, a.btn {
+    @apply inline-block cursor-pointer rounded-[9px] border-none bg-primary px-5 py-2 text-sm font-semibold text-white no-underline transition hover:bg-primary-hover
+      dark:bg-accent dark:hover:bg-accent-strong;
+  }
+  button.secondary, a.btn.secondary {
+    @apply cursor-pointer rounded-[9px] border border-slate-200 bg-transparent px-5 py-2 text-sm font-semibold text-slate-900 transition hover:border-primary hover:text-primary
+      dark:border-slate-700 dark:text-slate-100 dark:hover:border-accent dark:hover:text-accent-strong;
+  }
+  button.danger {
+    @apply cursor-pointer rounded-[9px] border-none bg-danger px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90;
+  }
+
+  label.field { @apply my-4 block; }
+  label.field span { @apply mb-1 block text-[13px] font-medium text-slate-500 dark:text-slate-400; }
+  label.field input, label.field select {
+    @apply w-full max-w-md rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none
+      focus:border-primary focus:ring-[3px] focus:ring-primary/20
+      dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+  }
+
+  .notice { @apply my-3 rounded-lg px-4 py-3 text-[13.5px]; }
+  .notice.ok { @apply border border-blue-200 bg-blue-50 text-primary dark:border-blue-900 dark:bg-blue-950/50 dark:text-accent-strong; }
+  .notice.bad { @apply border border-red-200 bg-red-50 text-danger dark:border-red-900 dark:bg-red-950/40 dark:text-red-400; }
+  .notice.info { @apply border border-blue-200 bg-blue-50 text-primary dark:border-blue-900 dark:bg-blue-950/50 dark:text-accent-strong; }
+
+  table.kv { @apply w-full border-collapse text-[13.5px]; }
+  table.kv td { @apply border-b border-slate-200 px-2.5 py-2.5 align-top dark:border-slate-800; }
+  table.kv td:first-child { @apply w-44 whitespace-nowrap text-slate-500 dark:text-slate-400; }
+
+  details > summary { @apply cursor-pointer text-sm text-slate-500 dark:text-slate-400; }
+
+  /* ---- index hero: the one glow moment (DESIGN.md) ---- */
+  .hero { @apply relative overflow-hidden pt-20 pb-4; }
+  .hero::before {
+    content: ""; position: absolute; inset: -45% -20% auto; height: 520px; pointer-events: none;
+    background:
+      radial-gradient(560px 300px at 18% 30%, rgba(43,127,255,0.10), transparent 68%),
+      radial-gradient(680px 340px at 62% 12%, rgba(21,93,252,0.07), transparent 70%);
+  }
+  @media (prefers-color-scheme: dark) {
+    .hero::before {
+      background:
+        radial-gradient(560px 300px at 18% 30%, rgba(43,127,255,0.20), transparent 68%),
+        radial-gradient(680px 340px at 62% 12%, rgba(21,93,252,0.13), transparent 70%);
+    }
+  }
+  .hero-grad {
+    background: linear-gradient(100deg, #155dfc 10%, #2b7fff 55%, #51a2ff 90%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .prompt {
+    @apply mt-7 flex max-w-xl items-center gap-2.5 rounded-[10px] border border-slate-200 bg-white px-4 py-3 text-sm shadow-[0_8px_24px_-18px_rgba(2,6,24,0.35)] transition
+      dark:border-slate-700 dark:bg-slate-900;
+  }
+  .prompt:focus-within { @apply border-primary ring-[3px] ring-primary/20; }
+  .prompt .ps { @apply font-mono font-semibold text-primary dark:text-accent-strong; }
+  .prompt input { @apply flex-1 border-none bg-transparent font-sans text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100; }
+  .prompt .caret { @apply h-[18px] w-[9px] animate-pulse bg-primary dark:bg-accent; }
+}

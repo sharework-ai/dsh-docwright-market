@@ -7,29 +7,35 @@
   <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
+  <section class="hero">
+    <div class="mx-auto max-w-5xl px-5">
+      <h1 class="!text-[38px] font-extrabold leading-[1.06] sm:!text-[52px]">
+        给 AI 装上文档能力，<br>从安装一个 <span class="hero-grad">pack</span> 开始。
+      </h1>
+      <p class="mt-4 max-w-xl text-[15px] text-slate-500 dark:text-slate-400">
+        docwright 的场景 pack 市场:生成 prompt、JSON Schema、校验规则与模板;
+        机器校验(<code class="font-mono text-primary dark:text-accent-strong">pack:check</code> 全绿)+ 人工审核,装进你的
+        <code class="font-mono text-primary dark:text-accent-strong">packsDir</code> 即用。
+        <span lang="en">Scenario packs for docwright: generator prompts, JSON schemas,
+        checking rules and templates — machine-verified, human-reviewed, installed into your packsDir.</span>
+      </p>
+      <div class="prompt">
+        <span class="ps">dm</span>
+        <input id="search" data-i18n-ph="searchHint">
+        <span class="caret" aria-hidden="true"></span>
+      </div>
+      <div id="chips" class="chips"></div>
+    </div>
+  </section>
   <main>
-    <h1>docwright pack market</h1>
-    <p class="muted">
-      Scenario packs for docwright (@sharework-ai/dsh-docwright): generator prompts, JSON schemas,
-      checking rules and templates — machine-verified with <code>pack:check</code>, human-reviewed,
-      installed into your <code>packsDir</code>.
-      <span lang="zh">docwright 的场景 pack 市场:生成 prompt、JSON Schema、校验规则与模板;
-      机器校验(<code>pack:check</code> 全绿)+ 人工审核,装进你的 <code>packsDir</code> 即用。</span>
-    </p>
-
-    <input id="search" class="search" data-i18n-ph="searchHint">
-    <div id="chips" class="chips"></div>
     <div id="packs" class="grid"></div>
     <p id="empty" class="muted hidden" data-i18n="noPacks"></p>
-
     <p id="signin-hint" class="muted hidden" data-i18n="signInToPublish"></p>
   </main>
   <footer class="site">
-    <span>
-      Install from a DSH session: ask <strong>“帮我安装 &lt;pack-name&gt;”</strong>;
-      CLI fallback <code>node install.mjs &lt;pack-name&gt;</code> (pin with <code>name@x.y.z</code>) —
-      <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>
-    </span>
+    Install from a DSH session: ask <strong>“帮我安装 &lt;pack-name&gt;”</strong>;
+    CLI fallback <code>node install.mjs &lt;pack-name&gt;</code> (pin with <code>name@x.y.z</code>) —
+    <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>
   </footer>
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
@@ -55,7 +61,8 @@
       const grid = document.getElementById('packs')
       grid.innerHTML = suites.map(s => `
         <div class="card suite">
-          <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.name)}</a>@${MB.esc(s.version)}
+          <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.name)}</a>
+            <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(s.version)}</span>
             <span class="chip suite-chip" title="${MB.esc((s.members || []).join(', '))}">${MB.t('kindSuite')}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(s.description))}</div>
           <div class="meta">
@@ -63,9 +70,11 @@
             ${(s.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
             ${(s.members || []).length > 5 ? `<span class="chip">+${s.members.length - 5}</span>` : ''}
           </div>
+          <div class="cmd">$ dm install <b>${MB.esc(s.name)}</b>@${MB.esc(s.version)}</div>
         </div>`).concat(packs.map(p => `
         <div class="card">
-          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}</h3>
+          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>
+            <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(p.version)}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
           <div class="meta">
             <span class="chip">${MB.esc(p.category)}</span>
@@ -75,6 +84,7 @@
             <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
             ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
           </div>
+          <div class="cmd">$ dm install <b>${MB.esc(p.name)}</b>@${MB.esc(p.version)}</div>
         </div>`)).join('')
       document.getElementById('empty').classList.toggle('hidden', packs.length + suites.length > 0)
     }
@@ -82,8 +92,8 @@
     function renderChips() {
       const cats = [...new Set(packsAll.concat(suitesAll).map(p => p.category))].sort()
       const chips = document.getElementById('chips')
-      chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">${MB.t('all')}</span>`]
-        .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">${MB.esc(c)}</span>`))
+      chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">--all</span>`]
+        .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">--${MB.esc(c)}</span>`))
         .join('')
       chips.querySelectorAll('.chip').forEach(el => el.addEventListener('click', () => {
         activeCategory = el.dataset.cat || null
@@ -95,7 +105,6 @@
     MB.header('browse')
     // Suites and packs list TOGETHER in one grid — suite members are hidden
     // from the pack listing server-side, so each entry appears exactly once.
-    // Suites render as purple-tinted cards (see .card.suite in style.css).
     let packsAll = []
     let suitesAll = []
     MB.api('/api/packs').then(({ packs, suites }) => {

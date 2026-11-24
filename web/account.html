@@ -30,13 +30,13 @@
 
       <section class="block card">
         <h3 data-i18n="tzTitle"></h3>
-        <p class="muted" style="font-size:0.85rem" data-i18n="tzHint"></p>
+        <p class="muted text-[13px]" data-i18n="tzHint"></p>
         <label class="field"><span data-i18n="tzLabel"></span><select id="tz-select"></select></label>
       </section>
 
       <section class="block card">
         <h3 data-i18n="orgTitle"></h3>
-        <p class="muted" style="font-size:0.85rem" data-i18n="orgHint"></p>
+        <p class="muted text-[13px]" data-i18n="orgHint"></p>
         <p id="org-current"><span class="muted" data-i18n="orgNone"></span></p>
         <label class="field"><span data-i18n="orgNew"></span><input id="org-input" placeholder="sharework-ai" pattern="[a-z0-9][a-z0-9-]{0,38}"></label>
         <div id="org-msg"></div>
@@ -116,7 +116,7 @@
       const acc = await MB.api('/api/account', { auth: true })
       document.getElementById('org-current').innerHTML = acc.org
         ? `<strong>${MB.esc(acc.org)}</strong> <span class="muted">(${MB.esc(acc.email ?? '')})</span>`
-        : `<span class="notice info" style="display:inline-block">${MB.t('orgNone')}</span>`
+        : `<span class="notice info !inline-block !my-0">${MB.t('orgNone')}</span>`
       if (acc.org) document.getElementById('org-input').placeholder = acc.org
     }
 
