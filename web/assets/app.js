@@ -310,7 +310,10 @@ window.MB = (() => {
   }
   function setLang(l) {
     localStorage.setItem('dw-market-lang', l)
-    applyI18n()
+    // Dynamically rendered templates (pack cards, queues, detail bodies)
+    // pick up MB.t() at render time — a reload re-renders them all, the
+    // same approach the timezone picker already uses.
+    location.reload()
   }
 
   // ---- date & time formatting --------------------------------------------
