@@ -8,7 +8,7 @@
 </head>
 <body>
   <main id="main">
-    <p class="muted">Loading…</p>
+    <p class="muted" data-i18n="loading"></p>
   </main>
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
@@ -54,12 +54,7 @@
         </section>
         <section class="block">
           <h2>${MB.t('install')}</h2>
-          <p class="max-w-xl text-[13.5px] text-slate-500 dark:text-slate-400">
-            In a DSH session with the docwright plugin, just ask:
-            <strong>“安装 ${MB.esc(suite.name)} 套件”</strong> (or “install the ${MB.esc(suite.name)} suite”).
-            <span lang="zh">在装有 docwright 插件的 DSH 会话中直接说<strong>“安装 ${MB.esc(suite.name)} 套件”</strong>即可:
-            模型会按成员清单一次装上全部 pack,你确认后才执行。</span>
-          </p>
+          <p class="max-w-xl text-[13.5px] text-slate-500 dark:text-slate-400" data-i18n-html="installSuiteDshHtml" data-i18n-args="name:${MB.esc(suite.name)}"></p>
         </section>`
       MB.header('browse')
     }

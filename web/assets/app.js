@@ -138,6 +138,22 @@ window.MB = (() => {
       noSuites: 'No suites yet.',
       suiteNotFound: 'Suite not found.',
       membersLabel: 'Member packs',
+      loading: 'Loading…',
+      heroTitleHtml: 'Give your AI document skills —<br>start by installing a <span class="hero-grad">pack</span>.',
+      heroSubHtml: 'The scenario-pack market for docwright: generator prompts, JSON schemas, checking rules and templates — machine-verified (<code class="font-mono text-primary dark:text-accent-strong">pack:check</code> green) + human-reviewed, installed straight into your <code class="font-mono text-primary dark:text-accent-strong">packsDir</code>.',
+      footerHtml: 'Install from a DSH session: ask <strong>“install &lt;pack-name&gt;”</strong>; CLI fallback <code>node install.mjs &lt;pack-name&gt;</code> (pin with <code>name@x.y.z</code>) — <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>',
+      yes: 'yes',
+      no: 'no',
+      cliSummary: 'CLI (outside a DSH session)',
+      cliDetailsHtml: 'Copies the pack into <code class="font-mono">./.docwright/packs/</code> (or pass <code class="font-mono">--into</code>), then restart the dsh host and check with <code class="font-mono">doc_packs</code>. Pin a version with <code class="font-mono">node install.mjs {name}@0.1.0</code>.',
+      installDshHtml: 'In a DSH session with the docwright plugin, just ask: <strong>“install {name}”</strong>. The model finds this pack and installs it after your confirmation — it is usable in the same session, no restart.',
+      installSuiteDshHtml: 'In a DSH session with the docwright plugin, just ask: <strong>“install the {name} suite”</strong>. The model installs every member pack at once, after your confirmation.',
+      backPacks: '← Packs',
+      authFill: 'Fill in email and password first.',
+      authMin6: 'Password needs at least 6 characters.',
+      pwFillRequired: 'Current password + new password (min 6) required.',
+      signupInstantHtml: 'Sign-up confirms instantly on this host (no SMTP).',
+      adminNoteHtml: 'Reviewing requires an admin profile (<code class="font-mono">profiles.is_admin</code>).',
     },
     zh: {
       browse: '市场',
@@ -270,6 +286,22 @@ window.MB = (() => {
       noSuites: '还没有套件。',
       suiteNotFound: '找不到该套件。',
       membersLabel: '成员 pack',
+      loading: '加载中…',
+      heroTitleHtml: '给 AI 装上文档能力，<br>从安装一个 <span class="hero-grad">pack</span> 开始。',
+      heroSubHtml: 'docwright 的场景 pack 市场：生成 prompt、JSON Schema、校验规则与模板；机器校验（<code class="font-mono text-primary dark:text-accent-strong">pack:check</code> 全绿）+ 人工审核，装进你的 <code class="font-mono text-primary dark:text-accent-strong">packsDir</code> 即用。',
+      footerHtml: '从 DSH 会话安装：直接说<strong>“帮我安装 &lt;pack-name&gt;”</strong>；CLI 兜底 <code>node install.mjs &lt;pack-name&gt;</code>（<code>name@x.y.z</code> 可钉版本）——<a href="https://github.com/sharework-ai/dsh-docwright-market">源码</a>',
+      yes: '是',
+      no: '否',
+      cliSummary: 'CLI（在 DSH 会话之外）',
+      cliDetailsHtml: '拷入 <code class="font-mono">./.docwright/packs/</code>（可用 <code class="font-mono">--into</code> 指定），重启宿主后用 <code class="font-mono">doc_packs</code> 确认可见；<code class="font-mono">node install.mjs {name}@0.1.0</code> 可安装指定历史版本。',
+      installDshHtml: '在装有 docwright 插件的 DSH 会话中直接说<strong>“帮我安装 {name}”</strong>即可：模型会找到本包并在你确认后安装，装完当前会话立即可用，无需重启。',
+      installSuiteDshHtml: '在装有 docwright 插件的 DSH 会话中直接说<strong>“安装 {name} 套件”</strong>即可：模型会按成员清单一次装上全部 pack，你确认后才执行。',
+      backPacks: '← 返回 Packs',
+      authFill: '请先填写邮箱和密码。',
+      authMin6: '密码至少 6 位。',
+      pwFillRequired: '请填写当前密码，新密码至少 6 位。',
+      signupInstantHtml: '本机自托管无邮件服务，注册即时生效。',
+      adminNoteHtml: '审核页需要管理员账号（<code class="font-mono">profiles.is_admin</code>）。',
     },
   }
 
@@ -334,6 +366,17 @@ window.MB = (() => {
   function applyI18n() {
     document.querySelectorAll('[data-i18n]').forEach(el => {
       el.textContent = t(el.dataset.i18n)
+    })
+    // data-i18n-html carries rich copy (links, code spans, <br>); "{name}"
+    // placeholders are filled from data-i18n-args ("name:cosmic-plan,...").
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      let html = t(el.dataset.i18nHtml)
+      const args = el.dataset.i18nArgs
+      if (args) for (const pair of args.split(',')) {
+        const [k, v] = pair.split(':')
+        html = html.replaceAll(`{${k}}`, esc(v ?? ''))
+      }
+      el.innerHTML = html
     })
     document.querySelectorAll('[data-i18n-ph]').forEach(el => {
       el.placeholder = t(el.dataset.i18nPh)

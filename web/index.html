@@ -9,16 +9,8 @@
 <body>
   <section class="hero">
     <div class="mx-auto max-w-5xl px-5">
-      <h1 class="!text-[38px] font-extrabold leading-[1.06] sm:!text-[52px]">
-        给 AI 装上文档能力，<br>从安装一个 <span class="hero-grad">pack</span> 开始。
-      </h1>
-      <p class="mt-4 max-w-xl text-[15px] text-slate-500 dark:text-slate-400">
-        docwright 的场景 pack 市场:生成 prompt、JSON Schema、校验规则与模板;
-        机器校验(<code class="font-mono text-primary dark:text-accent-strong">pack:check</code> 全绿)+ 人工审核,装进你的
-        <code class="font-mono text-primary dark:text-accent-strong">packsDir</code> 即用。
-        <span lang="en">Scenario packs for docwright: generator prompts, JSON schemas,
-        checking rules and templates — machine-verified, human-reviewed, installed into your packsDir.</span>
-      </p>
+      <h1 class="!text-[38px] font-extrabold leading-[1.06] sm:!text-[52px]" data-i18n-html="heroTitleHtml"></h1>
+      <p class="mt-4 max-w-xl text-[15px] text-slate-500 dark:text-slate-400" data-i18n-html="heroSubHtml"></p>
       <div class="prompt">
         <span class="ps">dm</span>
         <input id="search" data-i18n-ph="searchHint">
@@ -32,11 +24,7 @@
     <p id="empty" class="muted hidden" data-i18n="noPacks"></p>
     <p id="signin-hint" class="muted hidden" data-i18n="signInToPublish"></p>
   </main>
-  <footer class="site">
-    Install from a DSH session: ask <strong>“帮我安装 &lt;pack-name&gt;”</strong>;
-    CLI fallback <code>node install.mjs &lt;pack-name&gt;</code> (pin with <code>name@x.y.z</code>) —
-    <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>
-  </footer>
+  <footer class="site" data-i18n-html="footerHtml"></footer>
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
   <script>

@@ -8,7 +8,7 @@
 </head>
 <body>
   <main>
-    <p><a class="chip" href="/packs.html">← Packs</a></p>
+    <p><a class="chip" href="/packs.html" data-i18n="backPacks"></a></p>
     <h1 data-i18n="submitTitle"></h1>
     <p class="muted" data-i18n="submitHint"></p>
 
@@ -18,9 +18,7 @@
       <div id="auth-error"></div>
       <button id="btn-signin" class="primary" data-i18n="signIn"></button>
       <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
-      <p class="muted text-xs" id="auth-hint">
-        Sign-up confirms instantly on this host (no SMTP). <span lang="zh">本机自托管无邮件服务,注册即时生效。</span>
-      </p>
+      <p class="muted text-xs" id="auth-hint" data-i18n-html="signupInstantHtml"></p>
     </div>
 
     <div id="form-box" class="hidden">
@@ -126,7 +124,7 @@
       const password = document.getElementById('password').value
       const box = document.getElementById('auth-error')
       if (!email || !password) {
-        box.innerHTML = '<div class="notice bad">请先填写邮箱和密码(密码至少 6 位) / fill in email and password first</div>'
+        box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('authFill'))} ${MB.esc(MB.t('authMin6'))}</div>`
         return null
       }
       box.innerHTML = ''
@@ -146,7 +144,7 @@
       if (!creds) return
       if (creds.password.length < 6) {
         document.getElementById('auth-error').innerHTML =
-          '<div class="notice bad">密码至少 6 位 / password needs at least 6 characters</div>'
+          `<div class="notice bad">${MB.esc(MB.t('authMin6'))}</div>`
         return
       }
       const { error } = await MB.supabase.auth.signUp(creds)

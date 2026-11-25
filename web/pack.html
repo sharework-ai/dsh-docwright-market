@@ -8,7 +8,7 @@
 </head>
 <body>
   <main id="main">
-    <p class="muted">Loading…</p>
+    <p class="muted" data-i18n="loading"></p>
   </main>
   <script src="/vendor/supabase.js"></script>
   <script src="/assets/app.js"></script>
@@ -45,24 +45,11 @@
         </section>` : ''}
         <section class="block">
           <h2>${MB.t('install')}</h2>
-          <p class="max-w-xl text-[13.5px] text-slate-500 dark:text-slate-400">
-            In a DSH session with the docwright plugin, just ask:
-            <strong>“帮我安装 ${MB.esc(pack.name)}”</strong> (or “install ${MB.esc(pack.name)}”).
-            The model finds this pack and installs it after your confirmation — it is usable in the same
-            session, no restart.
-            <span lang="zh">在装有 docwright 插件的 DSH 会话中直接说<strong>“帮我安装 ${MB.esc(pack.name)}”</strong>即可：
-            模型会找到本包并在你确认后安装，装完当前会话立即可用，无需重启。</span>
-          </p>
+          <p class="max-w-xl text-[13.5px] text-slate-500 dark:text-slate-400" data-i18n-html="installDshHtml" data-i18n-args="name:${MB.esc(pack.name)}"></p>
           <code class="cmd max-w-2xl">node install.mjs ${MB.esc(pack.name)} --index ${MB.esc(location.origin)}/api/index</code>
           <details class="max-w-2xl">
-            <summary>CLI (outside a DSH session)</summary>
-            <p class="text-[13px] text-slate-500 dark:text-slate-400">
-              Copies the pack into <code class="font-mono">./.docwright/packs/</code> (or pass <code class="font-mono">--into</code>), then restart the
-              dsh host and check with <code class="font-mono">doc_packs</code>. Pin a version with
-              <code class="font-mono">node install.mjs ${MB.esc(pack.name)}@0.1.0</code>.
-              <span lang="zh">拷入 <code class="font-mono">./.docwright/packs/</code>(可用 <code class="font-mono">--into</code> 指定),重启宿主后用
-              <code class="font-mono">doc_packs</code> 确认可见;<code class="font-mono">name@版本号</code> 可安装指定历史版本。</span>
-            </p>
+            <summary data-i18n="cliSummary"></summary>
+            <p class="text-[13px] text-slate-500 dark:text-slate-400" data-i18n-html="cliDetailsHtml" data-i18n-args="name:${MB.esc(pack.name)}"></p>
           </details>
           <p class="mt-4"><a class="btn" href="${MB.esc(pack.tarball)}" download>${MB.t('download')}</a></p>
         </section>
@@ -75,7 +62,7 @@
             <tr><td>${MB.t('license')}</td><td>${MB.esc(pack.license)}</td></tr>
             <tr><td>${MB.t('consumes')}</td><td class="font-mono">${MB.esc((pack.consumes || []).join(', ')) || '—'}</td></tr>
             <tr><td>${MB.t('languages')}</td><td class="font-mono">${MB.esc((pack.languages || []).join(', '))}</td></tr>
-            <tr><td>${MB.t('requiresTopic')}</td><td>${pack.requiresTopic ? 'yes' : 'no'}</td></tr>
+            <tr><td>${MB.t('requiresTopic')}</td><td>${pack.requiresTopic ? MB.t('yes') : MB.t('no')}</td></tr>
             <tr><td>${MB.t('artifactPrefix')}</td><td class="font-mono">${MB.esc(pack.artifactPrefix || '—')}</td></tr>
             <tr><td>${MB.t('added')}</td><td>${MB.esc(MB.fmtDateTime(pack.added))}</td></tr>
             <tr><td>${MB.t('updated')}</td><td>${MB.esc(MB.fmtDateTime(pack.updated))}</td></tr>
