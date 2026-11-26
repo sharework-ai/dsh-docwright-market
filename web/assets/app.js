@@ -48,9 +48,9 @@ window.MB = (() => {
       tzHint: 'Applies to every date shown on the market pages.',
       tzLabel: 'Time zone',
             tzAuto: 'Time zone: browser default',
-      'tz_Asia/Shanghai': 'China Standard Time (zh-CN)',
-      'tz_Europe/London': 'UK time (en-GB)',
-      'tz_America/New_York': 'US Eastern time (en-US)',
+      'tz_Asia/Shanghai': 'China Standard Time',
+      'tz_Europe/London': 'UK time',
+      'tz_America/New_York': 'US Eastern time',
       history: 'Review history',
       emptyHistory: 'No decided reviews yet.',
       filter_all: 'All',
@@ -226,9 +226,9 @@ window.MB = (() => {
       tzHint: '作用于市场各页面展示的所有日期时间。',
       tzLabel: '时区',
             tzAuto: '时区：跟随浏览器',
-      'tz_Asia/Shanghai': '中国标准时间（中文格式）',
-      'tz_Europe/London': '英国时间（英文格式）',
-      'tz_America/New_York': '美国东部时间（英文格式）',
+      'tz_Asia/Shanghai': '中国标准时间',
+      'tz_Europe/London': '英国时间',
+      'tz_America/New_York': '美国东部时间',
       history: '审核历史',
       emptyHistory: '还没有审核记录。',
       filter_all: '全部',
@@ -413,8 +413,11 @@ window.MB = (() => {
   }
   function fmtDateTime(iso) {
     if (!iso) return '—'
+    // Format follows the INTERFACE LANGUAGE; only the zone comes from the
+    // timezone picker. (The old pairing bound each zone to a locale, which
+    // froze Chinese date shapes onto the English UI.)
     const tz = TIME_ZONES.find(t => t.id === timeZoneId())
-    const locale = tz.localeTag ?? (lang() === 'zh' ? 'zh-CN' : navigator.language || 'en')
+    const locale = lang() === 'zh' ? 'zh-CN' : 'en-US'
     const options = { dateStyle: 'medium', timeStyle: 'short' }
     if (tz.timeZone) options.timeZone = tz.timeZone
     const date = new Date(iso)

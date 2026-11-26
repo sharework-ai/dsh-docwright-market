@@ -69,36 +69,34 @@ function loadAppBrowser({ search = '', storage = {}, windowOverrides = {} } = {}
   return { MB: sandbox.MB, store, headerElements, replacedUrl, removedCount: () => removedHeaders, posted, windowListeners }
 }
 
-describe('MB.fmtDateTime (locale + timezone pairing)', () => {
+describe('MB.fmtDateTime (format follows language, zone follows picker)', () => {
   const iso = '2026-11-11T13:50:40Z'
 
-  it('renders China Standard Time in the zh-CN format', () => {
-    const { MB } = loadAppBrowser({ storage: { 'dw-market-tz': 'Asia/Shanghai' } })
+  it('zh interface renders the zh-CN shape in the picked zone', () => {
+    const { MB } = loadAppBrowser({ storage: { 'dw-market-lang': 'zh', 'dw-market-tz': 'Asia/Shanghai' } })
     const text = MB.fmtDateTime(iso)
-    expect(text).toContain('2026')
+    expect(text).toContain('2026年11月11日')
     expect(text).toContain('21:50')
   })
 
-  it('renders UK time (en-GB, GMT in November) when London is selected', () => {
-    const { MB } = loadAppBrowser({ storage: { 'dw-market-tz': 'Europe/London' } })
+  it('en interface renders the en-US shape in the picked zone', () => {
+    const { MB } = loadAppBrowser({ storage: { 'dw-market-lang': 'en', 'dw-market-tz': 'Europe/London' } })
     const text = MB.fmtDateTime(iso)
-    expect(text).toContain('13:50')
-    expect(text).toMatch(/11 Nov|11\/11/)
+    expect(text).toContain('Nov 11, 2026')
+    expect(text).toContain('PM')
   })
 
-  it('renders US Eastern time (EST in November) when New York is selected', () => {
-    const { MB } = loadAppBrowser({ storage: { 'dw-market-tz': 'America/New_York' } })
+  it('switching the language switches the shape without touching the zone', () => {
+    const { MB } = loadAppBrowser({ storage: { 'dw-market-lang': 'en', 'dw-market-tz': 'America/New_York' } })
     const text = MB.fmtDateTime(iso)
-    expect(text).toMatch(/8:50/)
+    expect(text).toContain('Nov 11, 2026')
+    expect(text).toContain('8:50')
     expect(text).toContain('AM')
   })
 
-  it('auto mode follows the interface language for the locale and the browser zone for offset', () => {
+  it('auto mode uses the browser zone', () => {
     const { MB } = loadAppBrowser({ storage: { 'dw-market-lang': 'zh' } })
-    const text = MB.fmtDateTime(iso)
-    // zh locale names the date regardless of zone; the exact clock time
-    // depends on the machine running the test, so only assert the year.
-    expect(text).toContain('2026')
+    expect(MB.fmtDateTime(iso)).toContain('2026')
   })
 
   it('passes null/invalid input through harmlessly', () => {
