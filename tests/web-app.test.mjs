@@ -219,3 +219,20 @@ describe('in-DSH install bridge', () => {
     expect(results).toHaveLength(1)
   })
 })
+
+describe('email masking (header account display)', () => {
+  it('keeps the first and last 2 characters with at most 4 stars between', () => {
+    const { MB } = loadAppBrowser()
+    expect(MB.maskEmail('penglong@example.com')).toBe('pe****om')
+    expect(MB.maskEmail('ab@example.com')).toBe('ab****om')
+  })
+
+  it('collapses short strings into x*x / x* shapes', () => {
+    const { MB } = loadAppBrowser()
+    expect(MB.maskEmail('abc')).toBe('x*x')
+    expect(MB.maskEmail('ab')).toBe('x*')
+    expect(MB.maskEmail('a')).toBe('x*')
+    expect(MB.maskEmail('')).toBe('x*')
+    expect(MB.maskEmail(null)).toBe('x*')
+  })
+})

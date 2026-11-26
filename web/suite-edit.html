@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suite maintenance — docwright pack market</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <main>
+    <p><a class="chip" href="/packs.html" data-i18n="backPacks"></a></p>
+    <h1 data-i18n="suiteMaint"></h1>
+    <p class="muted max-w-xl text-[13.5px]" data-i18n="suiteMaintIntro"></p>
+
+    <div id="auth-box" class="card">
+      <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <div id="auth-error"></div>
+      <button id="btn-signin" class="primary" data-i18n="signIn"></button>
+    </div>
+
+    <div id="form-box" class="hidden">
+      <div id="org-gate" class="notice info hidden">
+        <span data-i18n="orgGate"></span> <a href="/account.html" data-i18n="account"></a>
+      </div>
+      <form id="suite-form" class="hidden">
+        <label class="field"><span data-i18n="suiteName"></span><input id="s-name" placeholder="cosmic" required></label>
+        <label class="field"><span data-i18n="suiteVersion"></span><input id="s-version" placeholder="1.0.0" required></label>
+        <label class="field"><span data-i18n="category"></span>
+          <select id="s-category">
+            <option value="estimation">estimation</option>
+            <option value="dev" selected>dev</option>
+            <option value="pm">pm</option>
+            <option value="test">test</option>
+            <option value="docs">docs</option>
+            <option value="other">other</option>
+          </select>
+        </label>
+        <label class="field"><span data-i18n="suiteDescEn"></span><input id="s-desc-en" required></label>
+        <label class="field"><span data-i18n="suiteDescZh"></span><input id="s-desc-zh"></label>
+
+        <section class="block">
+          <h2 class="text-base font-semibold" data-i18n="suiteMembersPick"></h2>
+          <p class="muted text-[13px]" data-i18n="suitePickHint"></p>
+          <div id="chosen" class="chips !my-2"></div>
+          <input id="pick-filter" class="search !max-w-md" data-i18n-ph="searchHint" autocomplete="off">
+          <div id="pick-list" class="mt-3 max-h-80 overflow-auto rounded-[10px] border border-slate-200 dark:border-slate-800"></div>
+          <p id="pick-empty" class="muted mt-2 hidden text-[13px]" data-i18n="suitePickEmpty"></p>
+        </section>
+
+        <div id="s-msg"></div>
+        <button class="primary" type="submit" id="btn-save" data-i18n="createSuite"></button>
+      </form>
+    </div>
+  </main>
+  <script src="/vendor/supabase.js"></script>
+  <script src="/assets/app.js"></script>
+  <script>
+    MB.header('packs')
+
+    const editing = new URLSearchParams(location.search).get('name')
+    let catalog = []        // published packs available as members
+    const chosen = new Set() // member pack names
+
+    function renderChosen() {
+      const box = document.getElementById('chosen')
+      box.innerHTML = [...chosen].map(n =>
+        `<span class="chip active cursor-pointer" data-drop="${MB.esc(n)}" title="${MB.esc(MB.t('delete'))}">${MB.esc(n)} ×</span>`).join('')
+      box.querySelectorAll('[data-drop]').forEach(el => {
+        el.addEventListener('click', () => { chosen.delete(el.dataset.drop); renderChosen(); renderList() })
+      })
+    }
+
+    function renderList() {
+      const q = document.getElementById('pick-filter').value.trim().toLowerCase()
+      const rows = catalog.filter(p => !q || p.name.toLowerCase().includes(q) || MB.localizedDesc(p.description).toLowerCase().includes(q))
+      document.getElementById('pick-empty').classList.toggle('hidden', rows.length > 0)
+      const box = document.getElementById('pick-list')
+      box.innerHTML = rows.map(p => `
+        <div class="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2 text-[13.5px] last:border-none hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900" data-pick="${MB.esc(p.name)}">
+          <input type="checkbox" class="pointer-events-none" ${chosen.has(p.name) ? 'checked' : ''} tabindex="-1">
+          <span class="font-mono font-semibold">${MB.esc(p.name)}</span>
+          <span class="font-mono text-xs text-slate-500 dark:text-slate-400">@${MB.esc(p.version)}</span>
+          <span class="muted truncate text-xs">${MB.esc(MB.localizedDesc(p.description))}</span>
+        </div>`).join('')
+      box.querySelectorAll('[data-pick]').forEach(row => {
+        row.addEventListener('click', () => {
+          const n = row.dataset.pick
+          if (chosen.has(n)) chosen.delete(n)
+          else chosen.add(n)
+          renderChosen()
+          renderList()
+        })
+      })
+    }
+
+    function readCreds() {
+      const email = document.getElementById('email').value.trim()
+      const password = document.getElementById('password').value
+      const box = document.getElementById('auth-error')
+      if (!email || !password) {
+        box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('authFill'))}</div>`
+        return null
+      }
+      box.innerHTML = ''
+      return { email, password }
+    }
+
+    document.getElementById('btn-signin').addEventListener('click', async () => {
+      const creds = readCreds()
+      if (!creds) return
+      const { error } = await MB.supabase.auth.signInWithPassword(creds)
+      if (error) alert(error.message)
+      else maybeShowForm()
+    })
+
+    async function maybeShowForm() {
+      const s = await MB.session()
+      document.getElementById('auth-box').classList.toggle('hidden', !!s)
+      document.getElementById('form-box').classList.toggle('hidden', !s)
+      if (!s) return
+      const account = await MB.api('/api/account', { auth: true }).catch(() => null)
+      const gated = !account?.org
+      document.getElementById('org-gate').classList.toggle('hidden', !gated)
+      document.getElementById('suite-form').classList.toggle('hidden', gated)
+      if (gated) return
+
+      catalog = (await MB.api('/api/packs').catch(() => ({ packs: [] }))).packs
+      if (editing) {
+        const { suites } = await MB.api('/api/my/suites', { auth: true })
+        const suite = suites.find(st => st.name === editing)
+        if (!suite) {
+          document.getElementById('s-msg').innerHTML = `<div class="notice bad">${MB.esc(MB.t('suiteNotFound'))}</div>`
+          return
+        }
+        document.getElementById('s-name').value = suite.name
+        document.getElementById('s-name').disabled = true
+        document.getElementById('s-version').value = suite.version
+        document.getElementById('s-desc-en').value = suite.description?.en || ''
+        document.getElementById('s-desc-zh').value = suite.description?.zh || ''
+        if (suite.category) document.getElementById('s-category').value = suite.category
+        ;(suite.members || []).forEach(m => chosen.add(m))
+        document.getElementById('btn-save').textContent = MB.t('editSuite')
+        document.title = `${MB.t('suiteMaint')}: ${suite.name}`
+      }
+      renderChosen()
+      renderList()
+    }
+
+    document.getElementById('pick-filter').addEventListener('input', renderList)
+
+    document.getElementById('suite-form').addEventListener('submit', async event => {
+      event.preventDefault()
+      const result = document.getElementById('s-msg')
+      const btn = document.getElementById('btn-save')
+      btn.disabled = true
+      result.innerHTML = ''
+      const body = {
+        name: document.getElementById('s-name').value.trim(),
+        version: document.getElementById('s-version').value.trim(),
+        description: Object.assign(
+          { en: document.getElementById('s-desc-en').value.trim() },
+          document.getElementById('s-desc-zh').value.trim() ? { zh: document.getElementById('s-desc-zh').value.trim() } : {}),
+        category: document.getElementById('s-category').value,
+        members: [...chosen],
+      }
+      try {
+        if (editing) {
+          await MB.api(`/api/my/suites/${encodeURIComponent(editing)}`, { method: 'PATCH', body, auth: true })
+          result.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteUpdated'))}</div>
+            <p><a href="/packs.html">${MB.t('trackInPacks')}</a></p>`
+        } else {
+          await MB.api('/api/my/suites', { method: 'POST', body, auth: true })
+          result.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteQueued'))}</div>
+            <p><a href="/packs.html">${MB.t('trackInPacks')}</a></p>`
+        }
+        document.getElementById('suite-form').reset()
+        chosen.clear()
+        renderChosen()
+        renderList()
+      } catch (e) {
+        result.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      } finally {
+        btn.disabled = false
+      }
+    })
+
+    maybeShowForm()
+  </script>
+</body>
+</html>

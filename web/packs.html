@@ -24,14 +24,24 @@
       <div class="card mb-4">
         <div class="meta !mt-0">
           <span id="hub-org"></span>
-          <a href="/account.html" class="chip" data-i18n="orgEditHint"></a>
+          <a href="/account.html" class="chip !whitespace-nowrap" data-i18n="orgEditHint"></a>
           <span class="flex-1"></span>
           <a href="/submit.html" class="btn" data-i18n="submit"></a>
         </div>
       </div>
 
       <section class="block">
+        <h2 data-i18n="mySuites"></h2>
+        <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
+        <p id="my-suites-empty" class="muted hidden" data-i18n="noSuitesYet"></p>
+        <div id="my-suites"></div>
+        <!-- create / edit live on the dedicated suite maintenance page -->
+        <div class="meta"><a href="/suite-edit.html" class="btn secondary">+ <span data-i18n="suiteMaint"></span></a></div>
+      </section>
+
+      <section class="block">
         <h2 data-i18n="myPacks"></h2>
+        <p class="muted" style="font-size:0.85rem" data-i18n="standaloneHint"></p>
         <p id="my-packs-empty" class="muted hidden" data-i18n="noPacksYet"></p>
         <div id="my-packs"></div>
       </section>
@@ -40,28 +50,6 @@
         <h2 data-i18n="mySubmissions"></h2>
         <p id="my-subs-empty" class="muted hidden" data-i18n="noSubmissions"></p>
         <div id="my-subs"></div>
-      </section>
-
-      <section class="block">
-        <h2 data-i18n="mySuites"></h2>
-        <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
-        <!-- create / edit form: hidden until needed -->
-        <div id="suite-form-card" class="card mb-3 hidden">
-          <strong class="text-[13px]" id="suite-form-title"></strong>
-          <label class="field"><span data-i18n="suiteName"></span><input id="s-name" placeholder="cosmic"></label>
-          <label class="field"><span data-i18n="suiteDescEn"></span><input id="s-desc-en"></label>
-          <label class="field"><span data-i18n="suiteDescZh"></span><input id="s-desc-zh"></label>
-          <label class="field"><span data-i18n="suiteVersion"></span><input id="s-version" placeholder="1.0.0"></label>
-          <label class="field"><span data-i18n="suiteMembers"></span>
-            <select id="s-members" multiple style="min-height:8rem"></select>
-          </label>
-          <div id="s-msg"></div>
-          <button id="btn-suite-save" class="primary" data-i18n="createSuite"></button>
-          <button id="btn-suite-cancel" class="secondary" data-i18n="cancel"></button>
-        </div>
-        <p id="my-suites-empty" class="muted hidden" data-i18n="noSuitesYet"></p>
-        <div id="my-suites"></div>
-        <div class="meta"><button class="secondary" id="btn-new-suite">+ <span data-i18n="mySuites"></span></button></div>
       </section>
     </div>
   </main>
@@ -120,9 +108,14 @@
 
     async function loadMyPacks() {
       const { packs } = await MB.api('/api/my/packs', { auth: true })
-      document.getElementById('my-packs-empty').classList.toggle('hidden', packs.length > 0)
+      // Suite members are managed on their suite (13-8): the public catalog
+      // already hides them from the packs listing, so reuse it as the filter.
+      const catalog = await MB.api('/api/packs').catch(() => ({ packs: [] }))
+      const standalone = new Set(catalog.packs.map(pk => pk.name))
+      const visible = packs.filter(pk => standalone.has(pk.name))
+      document.getElementById('my-packs-empty').classList.toggle('hidden', visible.length > 0)
       const box = document.getElementById('my-packs')
-      box.innerHTML = packs.map(p => `
+      box.innerHTML = visible.map(p => `
         <div class="card mb-3" data-pack="${MB.esc(p.name)}">
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
             ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
@@ -145,7 +138,7 @@
         card.querySelectorAll('button[data-act]').forEach(btn => {
           btn.addEventListener('click', async () => {
             const act = btn.dataset.act
-            if (act === 'edit') return renderEditForm(card, name, packs.find(p => p.name === name))
+            if (act === 'edit') return renderEditForm(card, name, visible.find(p => p.name === name))
             if (act === 'disable' || act === 'enable') {
               await MB.api(`/api/my/packs/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
               await loadMyPacks()
@@ -251,91 +244,10 @@
     }
 
     // ---- my suites -------------------------------------------------------------
-    const CATEGORY_WHITELIST = ['estimation', 'dev', 'pm', 'test', 'docs', 'other']
-    let marketPacks = []
-    let suiteFormMode = null // null | 'create' | { editing: name }
-
-    function suiteFormValues() {
-      return {
-        name: document.getElementById('s-name').value.trim(),
-        version: document.getElementById('s-version').value.trim(),
-        description: {
-          en: document.getElementById('s-desc-en').value.trim(),
-          zh: document.getElementById('s-desc-zh').value.trim(),
-        },
-        category: document.getElementById('s-category').value,
-        members: [...document.getElementById('s-members').selectedOptions].map(o => o.value),
-      }
-    }
-
-    function openSuiteForm(mode, suite) {
-      suiteFormMode = mode
-      const card = document.getElementById('suite-form-card')
-      document.getElementById('suite-form-title').textContent =
-        mode === 'create' ? MB.t('createSuite') : `${MB.t('editSuite')}: ${suite.name}`
-      document.getElementById('s-name').value = mode === 'create' ? '' : suite.name
-      document.getElementById('s-name').disabled = mode !== 'create'
-      document.getElementById('s-desc-en').value = mode === 'create' ? '' : (suite.description?.en || '')
-      document.getElementById('s-desc-zh').value = mode === 'create' ? '' : (suite.description?.zh || '')
-      document.getElementById('s-version').value = mode === 'create' ? '' : suite.version
-      const members = mode === 'create' ? [] : (suite.members || [])
-      document.getElementById('s-members').querySelectorAll('option').forEach(o => {
-        o.selected = members.includes(o.value)
-      })
-      if (mode !== 'create') {
-        const cat = document.getElementById('s-category')
-        // category rides in suiteMeta only via edit round-trip; keep the current value otherwise
-        if (suite.category) cat.value = suite.category
-      }
-      document.getElementById('s-msg').innerHTML = ''
-      card.classList.remove('hidden')
-    }
-
-    function closeSuiteForm() {
-      suiteFormMode = null
-      document.getElementById('suite-form-card').classList.add('hidden')
-    }
-
-    document.getElementById('btn-suite-cancel').addEventListener('click', closeSuiteForm)
-
-    document.getElementById('btn-new-suite').addEventListener('click', () => {
-      if (suiteFormMode === 'create') return closeSuiteForm()
-      openSuiteForm('create')
-    })
-
-    document.getElementById('btn-suite-save').addEventListener('click', async () => {
-      const msg = document.getElementById('s-msg')
-      const body = suiteFormValues()
-      try {
-        if (suiteFormMode === 'create') {
-          await MB.api('/api/my/suites', { method: 'POST', body, auth: true })
-          msg.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteCreated'))}</div>`
-        } else if (suiteFormMode) {
-          await MB.api(`/api/my/suites/${encodeURIComponent(suiteFormMode)}`, { method: 'PATCH', body, auth: true })
-          msg.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteUpdated'))}</div>`
-        }
-        closeSuiteForm()
-        await loadMySuites()
-      } catch (e) {
-        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
-      }
-    })
+    // Create/edit live on the dedicated suite maintenance page
+    // (suite-edit.html) — this page only lists suites and routes there.
 
     async function loadMySuites() {
-      // member multi-select data source: the whole public catalog
-      marketPacks = (await MB.api('/api/packs').catch(() => ({ packs: [] }))).packs
-      const select = document.getElementById('s-members')
-      select.innerHTML = marketPacks.map(p => `<option value="${MB.esc(p.name)}">${MB.esc(p.name)}</option>`).join('')
-      const cat = document.getElementById('s-category')
-      if (!cat) {
-        // category select is injected once next to the form fields
-        const field = document.createElement('label')
-        field.className = 'field'
-        field.innerHTML = `<span>${MB.esc(MB.t('category'))}</span>
-          <select id="s-category">${CATEGORY_WHITELIST.map(c => `<option value="${c}" ${c === 'dev' ? 'selected' : ''}>${c}</option>`).join('')}</select>`
-        document.getElementById('s-version').closest('label.field').after(field)
-      }
-
       const { suites } = await MB.api('/api/my/suites', { auth: true })
       document.getElementById('my-suites-empty').classList.toggle('hidden', suites.length > 0)
       const box = document.getElementById('my-suites')
@@ -347,7 +259,7 @@
           <div class="desc">${MB.esc(MB.localizedDesc(st.description))}</div>
           <div class="meta">${(st.members || []).map(m => chipEl(m)).join('')}</div>
           <div class="meta">
-            <button class="secondary" data-act="edit">${MB.t('edit')}</button>
+            <a class="btn secondary" href="/suite-edit.html?name=${encodeURIComponent(st.name)}">${MB.t('edit')}</a>
             <button class="secondary" data-act="${st.enabled === false ? 'enable' : 'disable'}">
               ${MB.t(st.enabled === false ? 'enable' : 'disable')}
             </button>
@@ -360,7 +272,6 @@
         card.querySelectorAll('button[data-act]').forEach(btn => {
           btn.addEventListener('click', async () => {
             const act = btn.dataset.act
-            if (act === 'edit') return openSuiteForm(name, suites.find(st => st.name === name))
             if (act === 'disable' || act === 'enable') {
               await MB.api(`/api/my/suites/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
               await loadMySuites()

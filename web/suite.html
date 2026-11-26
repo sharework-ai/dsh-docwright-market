@@ -26,15 +26,20 @@
           <h3>${MB.esc(m.name)} <span class="badge code">${MB.t('missingMember')}</span></h3>
           <div class="desc">${MB.t('membersLabel')} — ${MB.t('missingMember')}</div>
         </div>` : `
-        <div class="card">
+        <div class="card cursor-pointer" data-href="/pack.html?name=${encodeURIComponent(m.name)}">
           <h3><a href="/pack.html?name=${encodeURIComponent(m.name)}">${MB.esc(m.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(m.version)}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(m.description))}</div>
           <div class="meta">
             ${(m.consumes || []).map(c => `<span class="chip">${MB.esc(c)}</span>`).join('')}
           </div>
-          <div class="cmd">$ dm install <b>${MB.esc(m.name)}</b>@${MB.esc(m.version)}</div>
         </div>`).join('')
+      document.querySelectorAll('[data-href]').forEach(card => {
+        card.addEventListener('click', e => {
+          if (e.target.closest('a, button, input')) return
+          location.href = card.dataset.href
+        })
+      })
 
       document.getElementById('main').innerHTML = `
         <p><a class="chip" href="/">← ${MB.t('browse')}</a></p>
@@ -55,7 +60,6 @@
         <section class="block">
           <h2>${MB.t('install')}</h2>
           <div id="install-bridge"></div>
-          <p class="max-w-xl text-[13.5px] text-slate-500 dark:text-slate-400" data-i18n-html="installSuiteDshHtml" data-i18n-args="name:${MB.esc(suite.name)}"></p>
         </section>`
       MB.header('browse')
       MB.mountInstallButton('suite', suite.name, document.getElementById('install-bridge'))

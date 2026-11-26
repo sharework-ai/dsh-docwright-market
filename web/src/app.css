@@ -116,7 +116,7 @@
   pre.warn { @apply border border-danger/60; }
   .cmd { @apply my-2 block overflow-auto rounded-lg bg-slate-900 px-4 py-2.5 font-mono text-[13px] text-slate-300; }
 
-  button.primary, a.btn {
+  button.primary, a.btn, button.btn {
     @apply inline-block cursor-pointer rounded-[9px] border-none bg-primary px-5 py-2 text-sm font-semibold text-white no-underline transition hover:bg-primary-hover
       dark:bg-accent dark:hover:bg-accent-strong;
   }
@@ -171,7 +171,21 @@
       dark:border-slate-700 dark:bg-slate-900;
   }
   .prompt:focus-within { @apply border-primary ring-[3px] ring-primary/20; }
-  .prompt .ps { @apply font-mono font-semibold text-primary dark:text-accent-strong; }
   .prompt input { @apply flex-1 border-none bg-transparent font-sans text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100; }
-  .prompt .caret { @apply h-[18px] w-[9px] animate-pulse bg-primary dark:bg-accent; }
+  .prompt .btn { @apply shrink-0 px-4 py-1.5; }
+
+  /* ---- tab switcher (submit page: Pack / Suite) ---- */
+  .tabs {
+    @apply mb-4 flex gap-1 rounded-[10px] border border-slate-200 bg-slate-100 p-1 dark:border-slate-800 dark:bg-slate-900;
+  }
+  .tabs button {
+    @apply flex-1 cursor-pointer rounded-lg border-none bg-transparent px-4 py-1.5 text-sm font-semibold text-slate-500 transition
+      dark:text-slate-400;
+  }
+  .tabs button:hover { @apply text-slate-900 dark:text-slate-100; }
+  .tabs button.active {
+    @apply bg-white text-slate-900 shadow-[0_1px_3px_rgba(2,6,24,0.12)]
+      dark:bg-slate-800 dark:text-slate-100;
+  }
+  .tabs button.active:hover { @apply text-slate-900 dark:text-slate-100; }
 }

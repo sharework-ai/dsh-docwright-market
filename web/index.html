@@ -12,9 +12,8 @@
       <h1 class="!text-[38px] font-extrabold leading-[1.06] sm:!text-[52px]" data-i18n-html="heroTitleHtml"></h1>
       <p class="mt-4 max-w-xl text-[15px] text-slate-500 dark:text-slate-400" data-i18n-html="heroSubHtml"></p>
       <div class="prompt">
-        <span class="ps">dm</span>
         <input id="search" data-i18n-ph="searchHint">
-        <span class="caret" aria-hidden="true"></span>
+        <button id="search-btn" class="btn" type="button" data-i18n="searchBtn"></button>
       </div>
       <div id="chips" class="chips"></div>
     </div>
@@ -48,40 +47,48 @@
       })
       const grid = document.getElementById('packs')
       grid.innerHTML = suites.map(s => `
-        <div class="card suite">
+        <div class="card suite relative cursor-pointer" data-href="/suite.html?name=${encodeURIComponent(s.name)}">
           <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(s.version)}</span>
             <span class="chip suite-chip" title="${MB.esc((s.members || []).join(', '))}">${MB.t('kindSuite')}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(s.description))}</div>
           <div class="meta">
-            <span class="chip">${MB.esc(s.category)}</span>
+            <span class="chip">${MB.esc(MB.t('cat_' + s.category))}</span>
             ${(s.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
             ${(s.members || []).length > 5 ? `<span class="chip">+${s.members.length - 5}</span>` : ''}
           </div>
-          <div class="cmd">$ dm install <b>${MB.esc(s.name)}</b>@${MB.esc(s.version)}</div>
         </div>`).concat(packs.map(p => `
-        <div class="card">
+        <div class="card relative cursor-pointer" data-href="/pack.html?name=${encodeURIComponent(p.name)}">
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(p.version)}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
           <div class="meta">
-            <span class="chip">${MB.esc(p.category)}</span>
+            <span class="chip">${MB.esc(MB.t('cat_' + p.category))}</span>
             <span class="chip">${MB.esc(p.author)}</span>
             ${p.org ? `<span class="chip">org: ${MB.esc(p.org)}</span>` : ''}
             <span class="chip">${MB.esc(p.license)}</span>
             <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
             ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
           </div>
-          <div class="cmd">$ dm install <b>${MB.esc(p.name)}</b>@${MB.esc(p.version)}</div>
         </div>`)).join('')
       document.getElementById('empty').classList.toggle('hidden', packs.length + suites.length > 0)
+      // Whole-card navigation (item: click anywhere on the body) plus the
+      // corner one-click install inside a real DSH frame.
+      grid.querySelectorAll('[data-href]').forEach(card => {
+        card.addEventListener('click', e => {
+          if (e.target.closest('a, button, input, select, textarea')) return
+          location.href = card.dataset.href
+        })
+        MB.mountCardInstallButton(packs.some(p => `/pack.html?name=${encodeURIComponent(p.name)}` === card.dataset.href) ? 'pack' : 'suite',
+          decodeURIComponent((card.dataset.href.match(/name=([^&]+)/) || [])[1] || ''), card)
+      })
     }
 
     function renderChips() {
       const cats = [...new Set(packsAll.concat(suitesAll).map(p => p.category))].sort()
       const chips = document.getElementById('chips')
-      chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">--all</span>`]
-        .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">--${MB.esc(c)}</span>`))
+      chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">${MB.esc(MB.t('cat_all'))}</span>`]
+        .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">${MB.esc(MB.t('cat_' + c))}</span>`))
         .join('')
       chips.querySelectorAll('.chip').forEach(el => el.addEventListener('click', () => {
         activeCategory = el.dataset.cat || null
@@ -102,6 +109,10 @@
       render()
     })
     document.getElementById('search').addEventListener('input', render)
+    document.getElementById('search-btn').addEventListener('click', () => {
+      render()
+      document.getElementById('search').focus()
+    })
     // Publish discoverability for signed-out visitors.
     MB.session().then(s => {
       if (!s) document.getElementById('signin-hint').classList.remove('hidden')

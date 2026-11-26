@@ -7,8 +7,8 @@ window.MB = (() => {
   const I18N = {
     en: {
       browse: 'Market',
-      packs: 'Packs',
-      submit: 'Submit a pack',
+      packs: 'Suites & Packs',
+      submit: 'Submit',
       admin: 'Review',
       login: 'Sign in',
       logout: 'Sign out',
@@ -38,8 +38,8 @@ window.MB = (() => {
       rejectedMachine: 'Verification failed — fix the report below and resubmit.',
       status: 'Status',
       refresh: 'Refresh status',
-      tabPack: 'Pack — upload archive',
-      tabSuite: 'Suite — form',
+      tabPack: 'Pack',
+      tabSuite: 'Suite',
       suiteSubmitHint: 'A suite is pure metadata: NO archive to upload — just the member list. Every member must already be a published pack. The submission enters the same review queue as packs.',
       suiteQueued: 'Suite submission accepted — it enters the review queue.',
       trackInPacks: 'Track it on the Packs page',
@@ -77,7 +77,7 @@ window.MB = (() => {
       account: 'Account',
       accountTitle: 'Your account',
       orgGate: 'Set your publisher org before submitting — it takes one minute on the account page.',
-      orgEditHint: 'Edit org on the account page',
+      orgEditHint: 'Edit org',
       signInToPublish: 'Sign in to publish your own packs.',
       accountHint: 'Password and publisher org settings. Your packs and submissions live on the Packs page.',
       passwordTitle: 'Change password',
@@ -96,8 +96,8 @@ window.MB = (() => {
       orgConfirm: (n) => `All ${n} of your pack(s) will be relabelled. Change now?`,
       orgTaken: 'That org is already taken.',
       orgInvalid: 'Org must be lowercase kebab-case (letters, digits, dashes), up to 39 chars, not reserved.',
-      myPacks: 'My packs',
-      mySubmissions: 'My submissions',
+      myPacks: 'Packs',
+      mySubmissions: 'Submissions',
       noPacksYet: 'No packs published yet.',
       noSubmissions: 'No submissions yet.',
       withdraw: 'Withdraw',
@@ -114,7 +114,7 @@ window.MB = (() => {
       publishedAt: 'Published',
       disabledBadge: 'disabled',
       suites: 'Suites',
-      mySuites: 'My suites',
+      mySuites: 'Suites',
       noSuitesYet: 'No suites published yet.',
       suitesIntro: 'A suite is a named group of packs — installing it brings every member at once.',
       suiteName: 'Suite name (lowercase kebab-case)',
@@ -139,9 +139,9 @@ window.MB = (() => {
       suiteNotFound: 'Suite not found.',
       membersLabel: 'Member packs',
       loading: 'Loading…',
-      heroTitleHtml: 'Give your AI document skills —<br>start by installing a <span class="hero-grad">pack</span>.',
+      heroTitleHtml: 'Generate consistent documents —<br>start by installing a <span class="hero-grad">pack</span>.',
       heroSubHtml: 'The scenario-pack market for docwright: generator prompts, JSON schemas, checking rules and templates — machine-verified (<code class="font-mono text-primary dark:text-accent-strong">pack:check</code> green) + human-reviewed, installed straight into your <code class="font-mono text-primary dark:text-accent-strong">packsDir</code>.',
-      footerHtml: 'Install from a DSH session: ask <strong>“install &lt;pack-name&gt;”</strong>; CLI fallback <code>node install.mjs &lt;pack-name&gt;</code> (pin with <code>name@x.y.z</code>) — <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>',
+      footerHtml: 'No pack fits? Just say: <strong>“please create a dsh-docwright pack or suite for me — here is what I need…”</strong> — <a href="https://github.com/sharework-ai/dsh-docwright-market">source</a>',
       yes: 'yes',
       no: 'no',
       cliSummary: 'CLI (outside a DSH session)',
@@ -149,6 +149,30 @@ window.MB = (() => {
       installDshHtml: 'In a DSH session with the docwright plugin, just ask: <strong>“install {name}”</strong>. The model finds this pack and installs it after your confirmation — it is usable in the same session, no restart.',
       installSuiteDshHtml: 'In a DSH session with the docwright plugin, just ask: <strong>“install the {name} suite”</strong>. The model installs every member pack at once, after your confirmation.',
       installHereBtn: 'Install into this machine',
+      cardInstall: 'Install',
+      cardInstalledOk: 'Installed',
+      cardInstallFail: 'Failed',
+      searchBtn: 'Search',
+      cat_all: 'All',
+      cat_estimation: 'Estimation',
+      cat_dev: 'Dev',
+      cat_pm: 'PM',
+      cat_test: 'Test',
+      cat_docs: 'Docs',
+      cat_other: 'Other',
+      standaloneHint: 'Standalone packs only — packs that belong to a suite are managed on their suite.',
+      suiteMaint: 'Suite maintenance',
+      suiteMaintIntro: 'A suite is a named group of published packs. Pick members, edit metadata, submit for review.',
+      suiteMembersPick: 'Member packs',
+      suitePickHint: 'Type to filter, click a row to add or remove.',
+      suiteMembersChosen: 'Selected',
+      suitePickEmpty: 'No packs match this filter.',
+      step1Archive: 'Step 1 — upload the pack archive',
+      recognizedHtml: 'Recognized <b>{name}</b>@{version}',
+      recognizedDesc: '{desc}',
+      recognizedUnknown: 'Could not read manifest.json from this archive — you can still submit; the server verifies it.',
+      membersMustBePublished: 'Members must already be published packs — upload those first on the Pack tab.',
+      goSuiteMaint: 'Maintain suites',
       installing: 'Installing… do not close this page.',
       installDone: 'Installed — usable in the current DSH session, no restart.',
       installFailed: 'Install failed',
@@ -162,8 +186,8 @@ window.MB = (() => {
     },
     zh: {
       browse: '市场',
-      packs: '我的 Packs',
-      submit: '投稿 pack',
+      packs: '套件与 Packs',
+      submit: '投稿',
       admin: '审核',
       login: '登录',
       logout: '退出',
@@ -192,8 +216,8 @@ window.MB = (() => {
       rejectedMachine: '机器校验未通过——按下方面板修复后重新提交。',
       status: '状态',
       refresh: '刷新状态',
-      tabPack: 'Pack — 上传压缩包',
-      tabSuite: 'Suite — 表单',
+      tabPack: 'Pack',
+      tabSuite: '套件',
       suiteSubmitHint: '套件是纯元数据：不需要上传压缩包，只需成员名单。每个成员必须已是已上架的 pack。投稿进入与 pack 相同的审核队列。',
       suiteQueued: '套件投稿已受理——进入审核队列。',
       trackInPacks: '到 Packs 页跟踪进度',
@@ -231,7 +255,7 @@ window.MB = (() => {
       account: '账号',
       accountTitle: '我的账号',
       orgGate: '投稿前请先设置发布者组织——去账号页一分钟搞定。',
-      orgEditHint: '到账号页编辑组织',
+      orgEditHint: '编辑组织',
       signInToPublish: '登录后可以发布和管理自己的 pack。',
       accountHint: '密码与发布者组织设置;你的 pack 与投稿管理在 Packs 页面。',
       passwordTitle: '修改密码',
@@ -249,8 +273,8 @@ window.MB = (() => {
       orgConfirm: (n) => `你的全部 ${n} 个 pack 都将一并更新组织标识,确定修改?`,
       orgTaken: '该组织名已被占用。',
       orgInvalid: '组织只能是小写字母/数字/连字符,最长 39 字符,且不能用保留名。',
-      myPacks: '我的 pack',
-      mySubmissions: '我的投稿',
+      myPacks: 'Packs',
+      mySubmissions: '投稿记录',
       noPacksYet: '还没有已发布的 pack。',
       noSubmissions: '还没有投稿记录。',
       withdraw: '撤回',
@@ -267,7 +291,7 @@ window.MB = (() => {
       publishedAt: '发布时间',
       disabledBadge: '已下架',
       suites: '套件',
-      mySuites: '我的套件',
+      mySuites: '套件',
       noSuitesYet: '还没有已发布的套件。',
       suitesIntro: '套件是一组 pack 的命名集合——安装套件会一次装上全部成员。',
       suiteName: '套件名(小写 kebab-case)',
@@ -292,9 +316,9 @@ window.MB = (() => {
       suiteNotFound: '找不到该套件。',
       membersLabel: '成员 pack',
       loading: '加载中…',
-      heroTitleHtml: '给 AI 装上文档能力，<br>从安装一个 <span class="hero-grad">pack</span> 开始。',
+      heroTitleHtml: '生成规范一致的文档，<br>从安装一个 <span class="hero-grad">pack</span> 开始。',
       heroSubHtml: 'docwright 的场景 pack 市场：生成 prompt、JSON Schema、校验规则与模板；机器校验（<code class="font-mono text-primary dark:text-accent-strong">pack:check</code> 全绿）+ 人工审核，装进你的 <code class="font-mono text-primary dark:text-accent-strong">packsDir</code> 即用。',
-      footerHtml: '从 DSH 会话安装：直接说<strong>“帮我安装 &lt;pack-name&gt;”</strong>；CLI 兜底 <code>node install.mjs &lt;pack-name&gt;</code>（<code>name@x.y.z</code> 可钉版本）——<a href="https://github.com/sharework-ai/dsh-docwright-market">源码</a>',
+      footerHtml: '没有找到合适的 pack？您可以试着说：<strong>“请帮我创建一个 dsh-docwright 的 pack 或 suite，具体要求如下……”</strong>——<a href="https://github.com/sharework-ai/dsh-docwright-market">源码</a>',
       yes: '是',
       no: '否',
       cliSummary: 'CLI（在 DSH 会话之外）',
@@ -302,6 +326,30 @@ window.MB = (() => {
       installDshHtml: '在装有 docwright 插件的 DSH 会话中直接说<strong>“帮我安装 {name}”</strong>即可：模型会找到本包并在你确认后安装，装完当前会话立即可用，无需重启。',
       installSuiteDshHtml: '在装有 docwright 插件的 DSH 会话中直接说<strong>“安装 {name} 套件”</strong>即可：模型会按成员清单一次装上全部 pack，你确认后才执行。',
       installHereBtn: '一键安装到本机',
+      cardInstall: '安装',
+      cardInstalledOk: '已安装',
+      cardInstallFail: '失败',
+      searchBtn: '搜索',
+      cat_all: '全部',
+      cat_estimation: '估算',
+      cat_dev: '开发',
+      cat_pm: '项目管理',
+      cat_test: '测试',
+      cat_docs: '文档',
+      cat_other: '其他',
+      standaloneHint: '仅列独立的 pack——属于套件的 pack 请在对应套件下管理。',
+      suiteMaint: '套件维护',
+      suiteMaintIntro: '套件是一组已发布 pack 的命名集合。选择成员、编辑元数据，提交进审核队列。',
+      suiteMembersPick: '成员 pack',
+      suitePickHint: '输入过滤，点击一行添加或移除。',
+      suiteMembersChosen: '已选',
+      suitePickEmpty: '没有匹配的 pack。',
+      step1Archive: '第 1 步：上传 pack 压缩包',
+      recognizedHtml: '已识别 <b>{name}</b>@{version}',
+      recognizedDesc: '{desc}',
+      recognizedUnknown: '未能从压缩包读取 manifest.json——仍可继续提交，服务端会校验。',
+      membersMustBePublished: '成员必须已是已发布的 pack——请先在 Pack 标签上传。',
+      goSuiteMaint: '套件维护',
       installing: '正在安装…请勿关闭页面。',
       installDone: '安装完成——当前 DSH 会话立即可用，无需重启。',
       installFailed: '安装失败',
@@ -453,6 +501,18 @@ window.MB = (() => {
     refreshAuthSlot()
   }
 
+  /** Mask an account string for display: keep the first and last 2
+   * characters, at most 4 '*' in between; strings shorter than 4 characters
+   * collapse to x*x / x* shapes (first and last letters survive). */
+  function maskEmail(str) {
+    const v = String(str ?? '')
+    const n = v.length
+    if (n < 2) return 'x*'
+    if (n === 2) return 'x*'
+    if (n < 4) return 'x' + '*'.repeat(n - 2) + 'x'
+    return v.slice(0, 2) + '****' + v.slice(-2)
+  }
+
   async function refreshAuthSlot() {
     const slot = document.getElementById('auth-slot')
     if (!slot) return
@@ -545,7 +605,7 @@ window.MB = (() => {
   function mountInstallButton(kind, name, host) {
     if (!inDsh() || !host) return
     const wrap = document.createElement('div')
-    wrap.className = 'my-4'
+    wrap.className = 'mt-6 mb-4'
     wrap.innerHTML = `
       <button class="primary" type="button">${esc(t('installHereBtn'))}</button>
       <p class="mt-2 text-[13px] text-slate-500 dark:text-slate-400" data-slot="status" hidden></p>`
@@ -571,5 +631,35 @@ window.MB = (() => {
     })
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, get supabase() { return supabase } }
+  /** Compact corner install button for catalog cards: absolute top-right
+   * (the card template must carry the `relative` class), shows a pending
+   * spinner face and the outcome inline. No-op when NOT framed by DSH. */
+  function mountCardInstallButton(kind, name, card) {
+    if (!inDsh() || !card) return
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.title = t('installHereBtn')
+    btn.className = 'absolute right-3 top-3 cursor-pointer rounded-full border border-slate-200 bg-white px-3 py-0.5 text-xs font-medium text-slate-500 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-accent dark:hover:text-accent-strong'
+    btn.textContent = t('cardInstall')
+    card.appendChild(btn)
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      btn.disabled = true
+      btn.textContent = '…'
+      requestInstall(kind, name, {
+        onResult(result) {
+          btn.disabled = false
+          if (result.ok) {
+            btn.textContent = `✓ ${t('cardInstalledOk')}`
+            btn.classList.add('!border-primary', '!text-primary', 'dark:!border-accent', 'dark:!text-accent-strong')
+          } else {
+            btn.textContent = `✗ ${t('cardInstallFail')}`
+            btn.title = result.message || ''
+          }
+        },
+      })
+    })
+  }
+
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, get supabase() { return supabase } }
 })()

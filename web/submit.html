@@ -25,13 +25,21 @@
       <div id="org-gate" class="notice info hidden">
         <span data-i18n="orgGate"></span> <a href="/account.html" data-i18n="account"></a>
       </div>
-      <div class="meta !mb-4 !mt-0">
-        <button id="tab-pack" class="primary" data-i18n="tabPack"></button>
-        <button id="tab-suite" class="secondary" data-i18n="tabSuite"></button>
+      <div class="tabs">
+        <button id="tab-pack" class="active" type="button" data-i18n="tabPack"></button>
+        <button id="tab-suite" type="button" data-i18n="tabSuite"></button>
       </div>
       <p id="suite-hint" class="muted hidden" style="font-size:0.85rem" data-i18n="suiteSubmitHint"></p>
+      <p id="suite-maint-hint" class="muted hidden text-[13px]">
+        <span data-i18n="membersMustBePublished"></span>
+        <a href="/suite-edit.html" data-i18n="goSuiteMaint"></a>
+      </p>
       <form id="submit-form">
-        <label class="field"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
+        <section class="block !my-4">
+          <h2 class="text-base font-semibold" data-i18n="step1Archive"></h2>
+          <label class="field !mt-2"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
+          <div id="recognized" class="notice info hidden"></div>
+        </section>
         <label class="field"><span data-i18n="author"></span><input id="author" required></label>
         <label class="field"><span data-i18n="category"></span>
           <select id="category">
@@ -107,15 +115,79 @@
     let mode = 'pack'
     function setMode(next) {
       mode = next
-      document.getElementById('tab-pack').className = mode === 'pack' ? 'primary' : 'secondary'
-      document.getElementById('tab-suite').className = mode === 'suite' ? 'primary' : 'secondary'
+      document.getElementById('tab-pack').classList.toggle('active', mode === 'pack')
+      document.getElementById('tab-suite').classList.toggle('active', mode === 'suite')
       document.getElementById('submit-form').classList.toggle('hidden', mode !== 'pack')
       document.getElementById('suite-form').classList.toggle('hidden', mode !== 'suite')
       document.getElementById('suite-hint').classList.toggle('hidden', mode !== 'suite')
+      document.getElementById('suite-maint-hint').classList.toggle('hidden', mode !== 'suite')
       document.getElementById('result').innerHTML = ''
     }
     document.getElementById('tab-pack').addEventListener('click', () => setMode('pack'))
     document.getElementById('tab-suite').addEventListener('click', () => setMode('suite'))
+
+    // Upload-first flow: as soon as an archive is chosen, read manifest.json
+    // straight out of the tgz in the browser (gzip via DecompressionStream +
+    // a minimal ustar walker) and show the recognized identity, so the user
+    // CONFIRMS metadata on top of a real archive instead of filling a form
+    // blind. The server-side machine verification stays the source of truth.
+    async function extractManifest(file) {
+      const reader = file.stream().pipeThrough(new DecompressionStream('gzip')).getReader()
+      const chunks = []
+      let total = 0
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        total += value.length
+        if (total > 64 * 1024 * 1024) break // sanity cap
+      }
+      const bytes = new Uint8Array(total)
+      let off = 0
+      for (const c of chunks) { bytes.set(c, off); off += c.length }
+      // minimal ustar walk: 512-byte headers, find the manifest.json entry
+      for (let pos = 0; pos + 512 <= bytes.length;) {
+        const header = bytes.subarray(pos, pos + 512)
+        if (header.every(b => b === 0)) break
+        let name = ''
+        for (let i = 0; i < 100 && header[i] !== 0; i++) name += String.fromCharCode(header[i])
+        const sizeField = new TextDecoder().decode(header.subarray(124, 136)).replace(/[\0 ]/g, '')
+        const size = parseInt(sizeField || '0', 8) || 0
+        const dataStart = pos + 512
+        const clean = name.replace(/^\.\//, '')
+        if (clean === 'manifest.json' || clean.endsWith('/manifest.json')) {
+          return JSON.parse(new TextDecoder().decode(bytes.subarray(dataStart, dataStart + size)))
+        }
+        pos = dataStart + Math.ceil(size / 512) * 512
+      }
+      return null
+    }
+
+    function showRecognized(manifest) {
+      const box = document.getElementById('recognized')
+      if (!manifest?.name) {
+        box.innerHTML = MB.esc(MB.t('recognizedUnknown'))
+        box.classList.remove('hidden')
+        return
+      }
+      const desc = manifest.description ? MB.esc(typeof manifest.description === 'string' ? manifest.description : (manifest.description.en || manifest.description.zh || '')) : ''
+      box.innerHTML = MB.t('recognizedHtml').replaceAll('{name}', MB.esc(manifest.name)).replaceAll('{version}', MB.esc(manifest.version || ''))
+        + (desc ? '<br>' + MB.t('recognizedDesc').replaceAll('{desc}', desc) : '')
+      box.classList.remove('hidden')
+    }
+
+    document.getElementById('archive').addEventListener('change', async event => {
+      const file = event.target.files[0]
+      if (!file) return
+      const box = document.getElementById('recognized')
+      box.classList.remove('hidden')
+      box.innerHTML = '…'
+      try {
+        showRecognized(await extractManifest(file))
+      } catch {
+        showRecognized(null)
+      }
+    })
 
     // Empty credentials reach GoTrue as an anonymous signup and die with
     // "Anonymous sign-ins are disabled" — validate before calling.
