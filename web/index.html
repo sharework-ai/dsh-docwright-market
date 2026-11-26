@@ -48,7 +48,7 @@
       const grid = document.getElementById('packs')
       grid.innerHTML = suites.map(s => `
         <div class="card suite relative cursor-pointer" data-href="/suite.html?name=${encodeURIComponent(s.name)}">
-          <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.name)}</a>
+          <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.org || s.author ? (s.org || s.author) + '/' : '')}${MB.esc(s.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(s.version)}</span>
             <span class="chip suite-chip" title="${MB.esc((s.members || []).join(', '))}">${MB.t('kindSuite')}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(s.description))}</div>
@@ -59,7 +59,7 @@
           </div>
         </div>`).concat(packs.map(p => `
         <div class="card relative cursor-pointer" data-href="/pack.html?name=${encodeURIComponent(p.name)}">
-          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>
+          <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.org ? p.org + '/' : '')}${MB.esc(p.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(p.version)}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
           <div class="meta">

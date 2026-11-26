@@ -27,60 +27,40 @@
       </div>
       <div class="tabs">
         <button id="tab-pack" class="active" type="button" data-i18n="tabPack"></button>
-        <button id="tab-suite" type="button" data-i18n="tabSuite"></button>
+        <button id="tab-suite" type="button" data-i18n="tabSuite" title="${''}"></button>
       </div>
-      <p id="suite-hint" class="muted hidden" style="font-size:0.85rem" data-i18n="suiteSubmitHint"></p>
-      <p id="suite-maint-hint" class="muted hidden text-[13px]">
-        <span data-i18n="membersMustBePublished"></span>
-        <a href="/suite-edit.html" data-i18n="goSuiteMaint"></a>
-      </p>
       <form id="submit-form">
         <section class="block !my-4">
           <h2 class="text-base font-semibold" data-i18n="step1Archive"></h2>
           <label class="field !mt-2"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
           <div id="recognized" class="notice info hidden"></div>
         </section>
-        <label class="field"><span data-i18n="author"></span><input id="author" required></label>
-        <label class="field"><span data-i18n="category"></span>
-          <select id="category">
-            <option value="estimation">estimation</option>
-            <option value="dev" selected>dev</option>
-            <option value="pm">pm</option>
-            <option value="test">test</option>
-            <option value="docs">docs</option>
-            <option value="other">other</option>
-          </select>
-        </label>
-        <label class="field"><span data-i18n="license"></span>
-          <select id="license">
-            <option value="MIT" selected>MIT</option>
-            <option value="Apache-2.0">Apache-2.0</option>
-            <option value="BSD-3-Clause">BSD-3-Clause</option>
-            <option value="BSD-2-Clause">BSD-2-Clause</option>
-            <option value="ISC">ISC</option>
-          </select>
-        </label>
-        <label class="field"><span data-i18n="homepage"></span><input id="homepage" type="url" placeholder="https://…"></label>
-        <button class="primary" type="submit" id="btn-send" data-i18n="send"></button>
-      </form>
-      <form id="suite-form" class="hidden">
-        <label class="field"><span data-i18n="suiteName"></span><input id="su-name" placeholder="cosmic" required></label>
-        <label class="field"><span data-i18n="suiteDescEn"></span><input id="su-desc-en" required></label>
-        <label class="field"><span data-i18n="suiteDescZh"></span><input id="su-desc-zh"></label>
-        <label class="field"><span data-i18n="suiteVersion"></span><input id="su-version" placeholder="1.0.0" required></label>
-        <label class="field"><span data-i18n="category"></span>
-          <select id="su-category">
-            <option value="estimation" selected>estimation</option>
-            <option value="dev">dev</option>
-            <option value="pm">pm</option>
-            <option value="test">test</option>
-            <option value="docs">docs</option>
-            <option value="other">other</option>
-          </select>
-        </label>
-        <label class="field"><span data-i18n="suiteMembers"></span><input id="su-members" placeholder="cosmic-context cosmic-plan cosmic-req" required></label>
-        <p class="muted text-xs" data-i18n="suiteMembersHint"></p>
-        <button class="primary" type="submit" id="btn-suite-send" data-i18n="createSuite"></button>
+        <section id="meta-step" class="block !my-4 hidden">
+          <h2 class="text-base font-semibold" data-i18n="confirmStep"></h2>
+          <p class="muted text-[13px]" id="locked-note" data-i18n="lockedFromArchive"></p>
+          <label class="field"><span data-i18n="author"></span><input id="author" required></label>
+          <label class="field"><span data-i18n="category"></span>
+            <select id="category">
+              <option value="estimation">estimation</option>
+              <option value="dev" selected>dev</option>
+              <option value="pm">pm</option>
+              <option value="test">test</option>
+              <option value="docs">docs</option>
+              <option value="other">other</option>
+            </select>
+          </label>
+          <label class="field"><span data-i18n="license"></span>
+            <select id="license">
+              <option value="MIT" selected>MIT</option>
+              <option value="Apache-2.0">Apache-2.0</option>
+              <option value="BSD-3-Clause">BSD-3-Clause</option>
+              <option value="BSD-2-Clause">BSD-2-Clause</option>
+              <option value="ISC">ISC</option>
+            </select>
+          </label>
+          <label class="field"><span data-i18n="homepage"></span><input id="homepage" type="url" placeholder="https://…"></label>
+          <button class="primary" type="submit" id="btn-send" data-i18n="send"></button>
+        </section>
       </form>
       <div id="result"></div>
     </div>
@@ -102,7 +82,6 @@
       const gated = !account?.org
       document.getElementById('org-gate').classList.toggle('hidden', !gated)
       document.getElementById('submit-form').classList.toggle('hidden', gated)
-      document.getElementById('suite-form').classList.toggle('hidden', gated)
       if (account?.org && !document.getElementById('author').value) {
         document.getElementById('author').value = account.org
       }
@@ -118,13 +97,12 @@
       document.getElementById('tab-pack').classList.toggle('active', mode === 'pack')
       document.getElementById('tab-suite').classList.toggle('active', mode === 'suite')
       document.getElementById('submit-form').classList.toggle('hidden', mode !== 'pack')
-      document.getElementById('suite-form').classList.toggle('hidden', mode !== 'suite')
-      document.getElementById('suite-hint').classList.toggle('hidden', mode !== 'suite')
-      document.getElementById('suite-maint-hint').classList.toggle('hidden', mode !== 'suite')
       document.getElementById('result').innerHTML = ''
     }
     document.getElementById('tab-pack').addEventListener('click', () => setMode('pack'))
-    document.getElementById('tab-suite').addEventListener('click', () => setMode('suite'))
+    // Suite submissions live on the dedicated maintenance page (metadata
+    // + member picking there); this tab simply hands off to it.
+    document.getElementById('tab-suite').addEventListener('click', () => { location.href = '/suite-edit.html' })
 
     // Upload-first flow: as soon as an archive is chosen, read manifest.json
     // straight out of the tgz in the browser (gzip via DecompressionStream +
@@ -163,17 +141,36 @@
       return null
     }
 
+    // Metadata carried by manifest.json is shown LOCKED (author, category,
+    // license, homepage); anything the manifest omits stays editable — the
+    // market needs at least an author, so silent blanks would only 403 later.
+    function fillMetaFromManifest(manifest) {
+      const bind = (id, value, lock) => {
+        const el = document.getElementById(id)
+        el.value = value ?? ''
+        el.disabled = lock
+      }
+      bind('author', manifest?.author, manifest?.author !== undefined)
+      bind('category', manifest?.category, manifest?.category !== undefined)
+      bind('license', manifest?.license, manifest?.license !== undefined)
+      bind('homepage', manifest?.homepage, manifest?.homepage !== undefined)
+      document.getElementById('locked-note').classList.toggle('hidden', !manifest?.author && manifest?.category === undefined && manifest?.license === undefined && manifest?.homepage === undefined)
+      document.getElementById('meta-step').classList.remove('hidden')
+    }
+
     function showRecognized(manifest) {
       const box = document.getElementById('recognized')
       if (!manifest?.name) {
         box.innerHTML = MB.esc(MB.t('recognizedUnknown'))
         box.classList.remove('hidden')
+        fillMetaFromManifest(null)
         return
       }
       const desc = manifest.description ? MB.esc(typeof manifest.description === 'string' ? manifest.description : (manifest.description.en || manifest.description.zh || '')) : ''
       box.innerHTML = MB.t('recognizedHtml').replaceAll('{name}', MB.esc(manifest.name)).replaceAll('{version}', MB.esc(manifest.version || ''))
         + (desc ? '<br>' + MB.t('recognizedDesc').replaceAll('{desc}', desc) : '')
       box.classList.remove('hidden')
+      fillMetaFromManifest(manifest)
     }
 
     document.getElementById('archive').addEventListener('change', async event => {
@@ -254,45 +251,6 @@
       } finally {
         btn.disabled = false
         btn.textContent = MB.t('send')
-      }
-    })
-
-    // SUITE submit: members are whitespace/comma separated pack names; the
-    // server validates each against the packs table before queueing.
-    document.getElementById('suite-form').addEventListener('submit', async event => {
-      event.preventDefault()
-      const result = document.getElementById('result')
-      const btn = document.getElementById('btn-suite-send')
-      const members = document.getElementById('su-members').value.split(/[\s,;]+/).filter(Boolean)
-      if (!members.length) return
-      const zhDesc = document.getElementById('su-desc-zh').value.trim()
-      btn.disabled = true
-      result.innerHTML = ''
-      try {
-        const res = await MB.api('/api/my/suites', {
-          method: 'POST',
-          auth: true,
-          body: {
-            name: document.getElementById('su-name').value.trim(),
-            version: document.getElementById('su-version').value.trim(),
-            description: Object.assign(
-              { en: document.getElementById('su-desc-en').value.trim() },
-              zhDesc ? { zh: zhDesc } : {}),
-            category: document.getElementById('su-category').value,
-            members,
-          },
-        })
-        if (res.ok) {
-          result.innerHTML = `<div class="notice ok">${MB.t('suiteQueued')}</div>
-            <p><a href="/packs.html">${MB.t('trackInPacks')}</a></p>`
-          document.getElementById('suite-form').reset()
-        } else {
-          result.innerHTML = `<div class="notice bad">${MB.esc(res.error || MB.t('rejectedMachine'))}</div>`
-        }
-      } catch (e) {
-        result.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
-      } finally {
-        btn.disabled = false
       }
     })
 

@@ -31,12 +31,13 @@
       </div>
 
       <section class="block">
-        <h2 data-i18n="mySuites"></h2>
+        <div class="flex items-center justify-between">
+          <h2 data-i18n="mySuites"></h2>
+          <button class="secondary" data-nav="/suite-edit.html">+ <span data-i18n="suiteCreate"></span></button>
+        </div>
         <p class="muted" style="font-size:0.85rem" data-i18n="suitesIntro"></p>
         <p id="my-suites-empty" class="muted hidden" data-i18n="noSuitesYet"></p>
         <div id="my-suites"></div>
-        <!-- create / edit live on the dedicated suite maintenance page -->
-        <div class="meta"><a href="/suite-edit.html" class="btn secondary">+ <span data-i18n="suiteMaint"></span></a></div>
       </section>
 
       <section class="block">
@@ -139,6 +140,7 @@
           btn.addEventListener('click', async () => {
             const act = btn.dataset.act
             if (act === 'edit') return renderEditForm(card, name, visible.find(p => p.name === name))
+            if (act === 'edit-page') return (location.href = `/suite-edit.html?name=${encodeURIComponent(name)}`)
             if (act === 'disable' || act === 'enable') {
               await MB.api(`/api/my/packs/${encodeURIComponent(name)}/${act}`, { method: 'POST', auth: true })
               await loadMyPacks()
@@ -259,7 +261,7 @@
           <div class="desc">${MB.esc(MB.localizedDesc(st.description))}</div>
           <div class="meta">${(st.members || []).map(m => chipEl(m)).join('')}</div>
           <div class="meta">
-            <a class="btn secondary" href="/suite-edit.html?name=${encodeURIComponent(st.name)}">${MB.t('edit')}</a>
+            <button class="secondary" data-act="edit-page">${MB.t('edit')}</button>
             <button class="secondary" data-act="${st.enabled === false ? 'enable' : 'disable'}">
               ${MB.t(st.enabled === false ? 'enable' : 'disable')}
             </button>
@@ -289,6 +291,8 @@
         })
       })
     }
+
+    document.querySelector('[data-nav="/suite-edit.html"]').addEventListener('click', () => { location.href = '/suite-edit.html' })
 
     async function maybeShowContent() {
       const s = await MB.session()

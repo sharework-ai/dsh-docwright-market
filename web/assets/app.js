@@ -153,6 +153,10 @@ window.MB = (() => {
       cardInstalledOk: 'Installed',
       cardInstallFail: 'Failed',
       searchBtn: 'Search',
+      installNeedsDsh: 'Browse in DeepSeek Harness to install',
+      suiteCreate: 'New suite',
+      confirmStep: 'Step 2 — confirm the submission',
+      lockedFromArchive: 'Read from the archive — not editable.',
       cat_all: 'All',
       cat_estimation: 'Estimation',
       cat_dev: 'Dev',
@@ -330,6 +334,10 @@ window.MB = (() => {
       cardInstalledOk: '已安装',
       cardInstallFail: '失败',
       searchBtn: '搜索',
+      installNeedsDsh: '请在 DeepSeek Harness 中浏览并安装',
+      suiteCreate: '新建套件',
+      confirmStep: '第 2 步：确认投稿内容',
+      lockedFromArchive: '以下信息读取自压缩包，不可修改。',
       cat_all: '全部',
       cat_estimation: '估算',
       cat_dev: '开发',
@@ -489,7 +497,7 @@ window.MB = (() => {
     el.className = 'site'
     el.innerHTML = `
       <div class="inner">
-        <a class="brand" href="/">docwright pack market</a>
+        <a class="brand" href="/">dsh-docwright market</a>
         <nav>
           <a href="/" data-i18n="browse"></a>
           <a href="/packs.html" data-i18n="packs" class="hidden" id="nav-packs"></a>
@@ -606,7 +614,14 @@ window.MB = (() => {
    * page's other primary buttons; a no-op when the site is NOT framed, so
    * standalone visitors keep the session/CLI instructions only. */
   function mountInstallButton(kind, name, host) {
-    if (!inDsh() || !host) return
+    if (!host) return
+    if (!inDsh()) {
+      const hint = document.createElement('p')
+      hint.className = 'notice info !inline-block max-w-xl'
+      hint.textContent = t('installNeedsDsh')
+      host.prepend(hint)
+      return
+    }
     const wrap = document.createElement('div')
     wrap.className = 'mt-6 mb-4'
     wrap.innerHTML = `
@@ -638,7 +653,15 @@ window.MB = (() => {
    * (the card template must carry the `relative` class), shows a pending
    * spinner face and the outcome inline. No-op when NOT framed by DSH. */
   function mountCardInstallButton(kind, name, card) {
-    if (!inDsh() || !card) return
+    if (!card) return
+    if (!inDsh()) {
+      const hint = document.createElement('span')
+      hint.className = 'absolute right-3 top-3 max-w-[45%] truncate rounded-full border border-slate-200 bg-slate-50 px-3 py-0.5 text-[11px] text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500'
+      hint.title = t('installNeedsDsh')
+      hint.textContent = t('installNeedsDsh')
+      card.appendChild(hint)
+      return
+    }
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.title = t('installHereBtn')
