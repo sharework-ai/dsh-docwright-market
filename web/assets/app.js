@@ -523,7 +523,7 @@ window.MB = (() => {
       return
     }
     // The email itself is the account entry point.
-    slot.innerHTML = `<a href="/account.html" class="auth-email">${esc(s.user.email)}</a> <a href="#" id="logout-a" data-i18n="logout"></a>`
+    slot.innerHTML = `<a href="/account.html" class="auth-email" title="${esc(s.user.email)}">${esc(maskEmail(s.user.email))}</a> <a href="#" id="logout-a" data-i18n="logout"></a>`
     slot.querySelector('#logout-a').addEventListener('click', async e => {
       e.preventDefault()
       await supabase.auth.signOut()
