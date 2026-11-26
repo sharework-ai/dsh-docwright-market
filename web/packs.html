@@ -160,7 +160,7 @@
     function renderEditForm(card, name, p) {
       const area = card.querySelector('.edit-area')
       if (area.innerHTML) { area.innerHTML = ''; return }
-      const CATEGORY_WHITELIST = ['estimation', 'dev', 'pm', 'test', 'docs', 'other']
+      const CATEGORY_WHITELIST = ['general', 'business', 'software', 'finance', 'education', 'entertainment', 'home', 'healthcare', 'legal', 'construction', 'other']
       const LICENSE_WHITELIST = ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC']
       const opt = (list, selected) => list.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('')
       area.innerHTML = `

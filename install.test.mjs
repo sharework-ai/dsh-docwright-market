@@ -123,7 +123,7 @@ function makeIndex({ format = 1, versions } = {}) {
       name: 'fixture-pack',
       version: '0.1.0',
       description: { en: 'fixture', zh: '夹具' },
-      category: 'dev',
+      category: 'software',
       author: 'someone',
       org: 'fixture-org',
       license: 'MIT',
