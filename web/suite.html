@@ -54,9 +54,11 @@
         </section>
         <section class="block">
           <h2>${MB.t('install')}</h2>
+          <div id="install-bridge"></div>
           <p class="max-w-xl text-[13.5px] text-slate-500 dark:text-slate-400" data-i18n-html="installSuiteDshHtml" data-i18n-args="name:${MB.esc(suite.name)}"></p>
         </section>`
       MB.header('browse')
+      MB.mountInstallButton('suite', suite.name, document.getElementById('install-bridge'))
     }
 
     MB.header('browse')

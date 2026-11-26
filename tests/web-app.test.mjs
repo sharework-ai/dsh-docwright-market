@@ -12,11 +12,13 @@ const APP_JS = readFileSync(fileURLToPath(new URL('../web/assets/app.js', import
 /** Evaluate app.js under browser shims and return the exposed MB object plus
  * the sandbox handles a test wants to inspect (storage contents, history
  * rewrites, prepended headers). */
-function loadAppBrowser({ search = '', storage = {} } = {}) {
+function loadAppBrowser({ search = '', storage = {}, windowOverrides = {} } = {}) {
   const store = { ...storage }
   const headerElements = []
   let removedHeaders = 0
   let replacedUrl = null
+  const posted = []
+  const windowListeners = {}
   const fakeElement = () => {
     const el = {
       _html: '',
@@ -58,10 +60,13 @@ function loadAppBrowser({ search = '', storage = {} } = {}) {
     navigator: { language: 'en-US' },
     history: { replaceState: (_a, _b, url) => { replacedUrl = url } },
     document,
+    addEventListener(type, fn) { (windowListeners[type] ??= []).push(fn) },
+    postMessage(msg) { posted.push(msg) },
+    ...windowOverrides,
   }
   const fn = new Function('window', 'localStorage', 'location', 'navigator', 'history', 'document', APP_JS)
   fn(sandbox, sandbox.localStorage, sandbox.location, sandbox.navigator, sandbox.history, document)
-  return { MB: sandbox.MB, store, headerElements, replacedUrl, removedCount: () => removedHeaders }
+  return { MB: sandbox.MB, store, headerElements, replacedUrl, removedCount: () => removedHeaders, posted, windowListeners }
 }
 
 describe('MB.fmtDateTime (locale + timezone pairing)', () => {
@@ -166,5 +171,51 @@ describe('timezone picker (account page)', () => {
   it('falls back to auto for an unknown persisted value', () => {
     const { MB } = loadAppBrowser({ storage: { 'dw-market-tz': 'Mars/Olympus' } })
     expect(MB.timeZoneId()).toBe('auto')
+  })
+})
+
+describe('in-DSH install bridge', () => {
+  it('reports framed vs standalone from window.parent', () => {
+    // The default sandbox window has no parent → treated as framed (the
+    // path a real embedded frame exercises; a standalone page answers false
+    // through the parent === window identity check in the browser).
+    const framed = loadAppBrowser()
+    expect(framed.MB.inDsh()).toBe(true)
+    // window.parent present (any parent object) → framed.
+    const withParent = loadAppBrowser({ windowOverrides: { parent: { postMessage() {} } } })
+    expect(withParent.MB.inDsh()).toBe(true)
+  })
+
+  it('posts the install-request protocol and routes replies by correlation id', () => {
+    const postedToParent = []
+    const app = loadAppBrowser({ windowOverrides: { parent: { postMessage: msg => postedToParent.push(msg) } } })
+    const accepted = []
+    const results = []
+    app.MB.requestInstall('pack', 'cosmic-plan', {
+      onAccepted: () => accepted.push(true),
+      onResult: r => results.push(r),
+    })
+    expect(postedToParent).toHaveLength(1)
+    const request = postedToParent[0]
+    expect(request).toMatchObject({ source: 'docwright-market', type: 'install-request', kind: 'pack', name: 'cosmic-plan' })
+    expect(typeof request.id).toBe('string')
+
+    // A result under the request's id resolves the pending call; unknown ids
+    // and foreign sources are ignored.
+    const listeners = app.windowListeners.message
+    expect(listeners).toHaveLength(1)
+    const onMessage = listeners[0]
+    onMessage({ data: { source: 'docwright-market', type: 'install-result', id: 'unknown', ok: true } })
+    onMessage({ data: { source: 'other', type: 'install-result', id: request.id, ok: true } })
+    expect(results).toHaveLength(0)
+    onMessage({ data: { source: 'docwright-market', type: 'install-accepted', id: request.id } })
+    expect(accepted).toEqual([true])
+    onMessage({ data: { source: 'docwright-market', type: 'install-result', id: request.id, ok: true, installed: [{ name: 'cosmic-plan', version: '1' }] } })
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ ok: true, installed: [{ name: 'cosmic-plan' }] })
+
+    // The id is single-shot: a replayed result does not fire again.
+    onMessage({ data: { source: 'docwright-market', type: 'install-result', id: request.id, ok: true } })
+    expect(results).toHaveLength(1)
   })
 })

@@ -148,6 +148,11 @@ window.MB = (() => {
       cliDetailsHtml: 'Copies the pack into <code class="font-mono">./.docwright/packs/</code> (or pass <code class="font-mono">--into</code>), then restart the dsh host and check with <code class="font-mono">doc_packs</code>. Pin a version with <code class="font-mono">node install.mjs {name}@0.1.0</code>.',
       installDshHtml: 'In a DSH session with the docwright plugin, just ask: <strong>“install {name}”</strong>. The model finds this pack and installs it after your confirmation — it is usable in the same session, no restart.',
       installSuiteDshHtml: 'In a DSH session with the docwright plugin, just ask: <strong>“install the {name} suite”</strong>. The model installs every member pack at once, after your confirmation.',
+      installHereBtn: 'Install into this machine',
+      installing: 'Installing… do not close this page.',
+      installDone: 'Installed — usable in the current DSH session, no restart.',
+      installFailed: 'Install failed',
+      installConfirm: 'Install "{name}" into this machine\'s packsDir now?',
       backPacks: '← Packs',
       authFill: 'Fill in email and password first.',
       authMin6: 'Password needs at least 6 characters.',
@@ -296,6 +301,11 @@ window.MB = (() => {
       cliDetailsHtml: '拷入 <code class="font-mono">./.docwright/packs/</code>（可用 <code class="font-mono">--into</code> 指定），重启宿主后用 <code class="font-mono">doc_packs</code> 确认可见；<code class="font-mono">node install.mjs {name}@0.1.0</code> 可安装指定历史版本。',
       installDshHtml: '在装有 docwright 插件的 DSH 会话中直接说<strong>“帮我安装 {name}”</strong>即可：模型会找到本包并在你确认后安装，装完当前会话立即可用，无需重启。',
       installSuiteDshHtml: '在装有 docwright 插件的 DSH 会话中直接说<strong>“安装 {name} 套件”</strong>即可：模型会按成员清单一次装上全部 pack，你确认后才执行。',
+      installHereBtn: '一键安装到本机',
+      installing: '正在安装…请勿关闭页面。',
+      installDone: '安装完成——当前 DSH 会话立即可用，无需重启。',
+      installFailed: '安装失败',
+      installConfirm: '现在把“{name}”安装进本机的 packsDir？',
       backPacks: '← 返回 Packs',
       authFill: '请先填写邮箱和密码。',
       authMin6: '密码至少 6 位。',
@@ -489,5 +499,77 @@ window.MB = (() => {
     select.addEventListener('change', () => setTimeZone(select.value))
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, get supabase() { return supabase } }
+  // ---- in-DSH one-click install bridge ------------------------------------
+  // When the site is embedded by the docwright plugin's market tab
+  // (window.parent !== window), the install button posts an install request
+  // to the parent tab; the tab — same-origin with the plugin's HTTP routes —
+  // performs the POST against /api/docwright/{pack,suite}-install and replies
+  // here. The tab verifies OUR origin before acting; replies are matched to
+  // pending requests by their protocol shape and correlation id, and the
+  // payload carries no secrets, so accepting them from any parent is safe.
+  let installSeq = 0
+  const pendingInstalls = new Map()
+  // Optional chaining keeps non-browser shims (unit-test sandboxes without a
+  // real window) loading; the bridge simply stays dormant there.
+  window.addEventListener?.('message', event => {
+    const data = event.data
+    if (typeof data !== 'object' || data === null || data.source !== 'docwright-market') return
+    const pending = pendingInstalls.get(data.id)
+    if (!pending) return
+    if (data.type === 'install-accepted') {
+      pending.onAccepted?.()
+      return
+    }
+    if (data.type === 'install-result') {
+      pendingInstalls.delete(data.id)
+      pending.onResult(data)
+    }
+  })
+
+  /** True when the site is framed (i.e. embedded by the docwright market tab). */
+  function inDsh() {
+    try { return window.parent !== window } catch { return true }
+  }
+
+  /** Ask the embedding tab to install one pack or suite. */
+  function requestInstall(kind, name, { onAccepted, onResult } = {}) {
+    const id = `dw-install-${Date.now()}-${installSeq++}`
+    pendingInstalls.set(id, { onAccepted, onResult })
+    window.parent?.postMessage?.({ source: 'docwright-market', type: 'install-request', id, kind, name }, '*')
+  }
+
+  /** Mount the one-click install button + status line into `host` (a plain
+   * element inside the page's install section). Tailwind-styled like the
+   * page's other primary buttons; a no-op when the site is NOT framed, so
+   * standalone visitors keep the session/CLI instructions only. */
+  function mountInstallButton(kind, name, host) {
+    if (!inDsh() || !host) return
+    const wrap = document.createElement('div')
+    wrap.className = 'my-4'
+    wrap.innerHTML = `
+      <button class="primary" type="button">${esc(t('installHereBtn'))}</button>
+      <p class="mt-2 text-[13px] text-slate-500 dark:text-slate-400" data-slot="status" hidden></p>`
+    host.prepend(wrap)
+    const button = wrap.querySelector('button')
+    const status = wrap.querySelector('[data-slot="status"]')
+    const show = text => { status.textContent = text; status.hidden = false }
+    button.addEventListener('click', () => {
+      if (!window.confirm(t('installConfirm').replaceAll('{name}', name))) return
+      button.disabled = true
+      show(t('installing'))
+      requestInstall(kind, name, {
+        onResult(result) {
+          button.disabled = false
+          if (result.ok) {
+            const landed = Array.isArray(result.installed) ? result.installed.length : 0
+            show(`${t('installDone')} (${landed})`)
+          } else {
+            show(`${t('installFailed')}: ${result.message || 'unknown error'}`)
+          }
+        },
+      })
+    })
+  }
+
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, get supabase() { return supabase } }
 })()
