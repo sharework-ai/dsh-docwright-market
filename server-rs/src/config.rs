@@ -78,7 +78,7 @@ impl Config {
 }
 
 pub const CATEGORY_WHITELIST: [&str; 11] = [
-  "general", "business", "software", "finance", "education", "entertainment", "home", "healthcare", "legal", "construction", "other",
+  "general", "business", "it", "finance", "education", "entertainment", "media", "healthcare", "legal", "engineering", "other",
 ];
 pub const LICENSE_WHITELIST: [&str; 5] = ["MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC"];
 /// Publisher orgs that are refused as a slug (product/project identity, not a

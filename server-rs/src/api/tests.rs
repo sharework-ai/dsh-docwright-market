@@ -107,7 +107,7 @@ fn suite_meta(name: &str, version: &str, members: &[&str]) -> SuiteMeta {
         "name": name,
         "version": version,
         "description": { "en": "a suite", "zh": "套件" },
-        "category": "software",
+        "category": "it",
         "members": members,
     }))
     .expect("valid suite meta")
@@ -771,22 +771,22 @@ async fn auth_gated_routes_reject_missing_and_bogus_tokens(pool: PgPool) {
 async fn suite_form_rejects_bad_shapes(_pool: PgPool) {
     init_log();
     let bad = |body: Value| SuiteMeta::parse(&body).expect_err("must fail");
-    assert!(bad(json!({ "version": "1.0.0", "description": {"en": "x"}, "category": "software", "members": ["a"] }))
+    assert!(bad(json!({ "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": ["a"] }))
         .message
         .contains("name"));
-    assert!(bad(json!({ "name": "Bad_Name", "version": "1.0.0", "description": {"en": "x"}, "category": "software", "members": ["a"] }))
+    assert!(bad(json!({ "name": "Bad_Name", "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": ["a"] }))
         .message
         .contains("kebab-case"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"zh": "只有中文"}, "category": "software", "members": ["a"] }))
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"zh": "只有中文"}, "category": "it", "members": ["a"] }))
         .message
         .contains("description.en"));
     assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "nope", "members": ["a"] }))
         .message
         .contains("category"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "software", "members": [] }))
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": [] }))
         .message
         .contains("at least one member"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "software", "members": ["a", "a"] }))
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": ["a", "a"] }))
         .message
         .contains("duplicate member"));
 }
