@@ -93,6 +93,8 @@
   .card.suite .suite-chip { @apply border-blue-300 bg-blue-50 text-primary dark:border-blue-800 dark:bg-blue-950 dark:text-accent-strong; }
 
   .meta { @apply mt-2 flex flex-wrap gap-1.5; }
+  /* chips living next to tall flex siblings (buttons) must not stretch */
+  .meta .chip, .meta .badge { @apply self-center; }
   .grid { @apply grid gap-4; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
   .chips { @apply my-3 mb-6 flex flex-wrap gap-2; }
   .chip, .badge {
