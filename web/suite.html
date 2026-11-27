@@ -60,7 +60,9 @@
         <section class="block">
           <h2>${MB.t('install')}</h2>
           <div id="install-bridge"></div>
+          <p class="mt-4"><button class="primary" type="button" id="dl-zip">${MB.t('downloadZip')}</button></p>
         </section>`
+      document.getElementById('dl-zip').addEventListener('click', e => MB.downloadZip('suite', suite.name, e.target))
       MB.header('browse')
       MB.mountInstallButton('suite', suite.name, document.getElementById('install-bridge'))
     }

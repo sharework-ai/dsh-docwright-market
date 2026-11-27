@@ -28,7 +28,8 @@
         <tr>
           <td class="font-mono">${MB.esc(v.version)}</td>
           <td>${MB.esc(v.publishedAt)}</td>
-          <td><a href="${MB.esc(v.tarball)}" download>${MB.t('download')}</a></td>
+          <td><a href="${MB.esc(v.tarball)}" download>${MB.t('download')}</a> ·
+              <a href="#" data-zip-version="${MB.esc(v.version)}">${MB.t('downloadZip')}</a></td>
         </tr>`).join('')
       document.getElementById('main').innerHTML = `
         <p><a class="chip" href="/">← ${MB.t('browse')}</a></p>
@@ -52,7 +53,10 @@
             <summary data-i18n="cliSummary"></summary>
             <p class="text-[13px] text-slate-500 dark:text-slate-400" data-i18n-html="cliDetailsHtml" data-i18n-args="name:${MB.esc(pack.name)}"></p>
           </details>
-          <p class="mt-4"><a class="btn" href="${MB.esc(pack.tarball)}" download>${MB.t('download')}</a></p>
+          <p class="mt-4 flex gap-2">
+            <a class="btn" href="${MB.esc(pack.tarball)}" download>${MB.t('download')}</a>
+            <button class="primary" type="button" id="dl-zip">${MB.t('downloadZip')}</button>
+          </p>
         </section>
         <section class="block">
           <table class="kv max-w-2xl">
@@ -75,6 +79,10 @@
           <table class="kv max-w-2xl">${versionRows}</table>
         </section>` : ''}`
 
+      document.getElementById('dl-zip').addEventListener('click', e => MB.downloadZip('pack', pack.name, e.target))
+      document.querySelectorAll('[data-zip-version]').forEach(a => {
+        a.addEventListener('click', e => { e.preventDefault(); MB.downloadZip('pack', pack.name, a) })
+      })
       MB.header('browse')
       MB.mountInstallButton('pack', pack.name, document.getElementById('install-bridge'))
     }

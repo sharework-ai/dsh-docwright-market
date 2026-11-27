@@ -56,6 +56,7 @@
             <span class="chip">${MB.esc(MB.t('cat_' + s.category))}</span>
             ${(s.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
             ${(s.members || []).length > 5 ? `<span class="chip">+${s.members.length - 5}</span>` : ''}
+            <a class="chip" href="#" data-zip-suite="${MB.esc(s.name)}" title="${MB.esc(MB.t('downloadZip'))}">↓ zip</a>
           </div>
         </div>`).concat(packs.map(p => `
         <div class="card relative cursor-pointer" data-href="/pack.html?name=${encodeURIComponent(p.name)}">
@@ -69,6 +70,7 @@
             <span class="chip">${MB.esc(p.license)}</span>
             <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
             ${p.hasFunctionRules ? '<span class="badge code">functions.js</span>' : ''}
+            <a class="chip" href="#" data-zip-pack="${MB.esc(p.name)}" title="${MB.esc(MB.t('downloadZip'))}">↓ zip</a>
           </div>
         </div>`)).join('')
       document.getElementById('empty').classList.toggle('hidden', packs.length + suites.length > 0)
@@ -82,6 +84,8 @@
         MB.mountCardInstallButton(packs.some(p => `/pack.html?name=${encodeURIComponent(p.name)}` === card.dataset.href) ? 'pack' : 'suite',
           decodeURIComponent((card.dataset.href.match(/name=([^&]+)/) || [])[1] || ''), card)
       })
+      grid.querySelectorAll('[data-zip-pack]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); MB.downloadZip('pack', a.dataset.zipPack, a) }))
+      grid.querySelectorAll('[data-zip-suite]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); MB.downloadZip('suite', a.dataset.zipSuite, a) }))
     }
 
     function renderChips() {

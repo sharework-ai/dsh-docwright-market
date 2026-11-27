@@ -234,3 +234,61 @@ describe('email masking (header account display)', () => {
     expect(MB.maskEmail(null)).toBe('x*')
   })
 })
+
+describe('ZIP download (tarEntries + makeZip)', () => {
+  const enc = new TextEncoder()
+  function ustarEntry(name, content) {
+    const header = new Uint8Array(512)
+    header.set(enc.encode(name), 0)
+    header.set(enc.encode(content.length.toString(8).padStart(11, '0') + ' '), 124)
+    header[156] = 48 // '0' regular file
+    const pad = (512 - content.length % 512) % 512
+    const body = new Uint8Array(content.length + pad)
+    body.set(content)
+    return new Uint8Array([...header, ...body])
+  }
+
+  async function tgzOf(files) {
+    const parts = []
+    for (const [name, text] of files) parts.push(ustarEntry(name, enc.encode(text)))
+    parts.push(new Uint8Array(1024))
+    const gz = new Blob(parts).stream().pipeThrough(new CompressionStream('gzip'))
+    return new Response(gz).arrayBuffer()
+  }
+
+  it('walks ustar entries (strip ./, keep file bytes)', async () => {
+    const { MB } = loadAppBrowser()
+    const tgz = await tgzOf([['./manifest.json', '{"name":"demo"}'], ['rules/zh-CN.json', '[]']])
+    const entries = await MB.tarEntries(new Blob([tgz]).stream().pipeThrough(new DecompressionStream('gzip')))
+    expect(entries.map(e => e.path).sort()).toEqual(['manifest.json', 'rules/zh-CN.json'])
+    expect(new TextDecoder().decode(entries.find(e => e.path === 'manifest.json').bytes)).toBe('{"name":"demo"}')
+  })
+
+  it('writes a valid STORE-method zip (signatures, crc via data descriptor offset math)', async () => {
+    const { MB } = loadAppBrowser()
+    const blob = MB.makeZip([
+      { path: 'a/one.json', bytes: enc.encode('one') },
+      { path: 'b/two.md', bytes: enc.encode('two-two') },
+    ])
+    const buf = new Uint8Array(await blob.arrayBuffer())
+    const dv = new DataView(buf.buffer)
+    expect(dv.getUint32(0, true)).toBe(0x04034b50) // local header
+    // walk both local headers, then expect the central directory signature
+    const nameLen1 = dv.getUint16(26, true)
+    const size1 = dv.getUint32(18, true)
+    let off = 30 + nameLen1 + size1
+    expect(dv.getUint32(off, true)).toBe(0x04034b50)
+    const nameLen2 = dv.getUint16(off + 26, true)
+    const size2 = dv.getUint32(off + 18, true)
+    off = off + 30 + nameLen2 + size2
+    expect(dv.getUint32(off, true)).toBe(0x02014b50) // central directory
+    expect(dv.getUint16(off + 10, true)).toBe(0) // stored
+    const cdOffset = off // where the central directory starts (after both locals)
+    const cdSize = buf.length - 22 - cdOffset
+    expect(dv.getUint32(buf.length - 22, true)).toBe(0x06054b50) // EOCD
+    expect(dv.getUint16(buf.length - 22 + 8, true)).toBe(2) // two entries
+    expect(dv.getUint16(buf.length - 22 + 10, true)).toBe(2)
+    expect(dv.getUint32(buf.length - 22 + 12, true)).toBe(cdSize)
+    expect(dv.getUint32(buf.length - 22 + 16, true)).toBe(cdOffset)
+  })
+})

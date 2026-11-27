@@ -154,6 +154,9 @@ window.MB = (() => {
       cardInstallFail: 'Failed',
       searchBtn: 'Search',
       installNeedsDsh: 'Browse in DeepSeek Harness to install',
+      downloadZip: 'Download ZIP',
+      zipping: 'Zipping…',
+      zipFail: 'ZIP failed',
       suiteCreate: 'New suite',
       confirmStep: 'Step 2 — confirm the submission',
       lockedFromArchive: 'Read from the archive — not editable.',
@@ -340,6 +343,9 @@ window.MB = (() => {
       cardInstallFail: '失败',
       searchBtn: '搜索',
       installNeedsDsh: '请在 DeepSeek Harness 中浏览并安装',
+      downloadZip: '下载 ZIP',
+      zipping: '打包中…',
+      zipFail: '打包失败',
       suiteCreate: '新建套件',
       confirmStep: '第 2 步：确认投稿内容',
       lockedFromArchive: '以下信息读取自压缩包，不可修改。',
@@ -697,5 +703,175 @@ window.MB = (() => {
     })
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, get supabase() { return supabase } }
+  // ---- client-side ZIP download (pack files / suite members) -------------
+  // The server stays zero-dependency: tarballs are public tgz files, so the
+  // browser gunzips (DecompressionStream), walks the ustar entries with the
+  // same minimal parser the submit page uses, and writes a STORE-method ZIP
+  // (the entries are already compressed — re-deflating would buy nothing).
+
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256)
+    for (let n = 0; n < 256; n++) {
+      let c = n
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+      table[n] = c >>> 0
+    }
+    return table
+  })()
+
+  function crc32(bytes) {
+    let c = 0xffffffff
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+
+  /** Minimal ustar walk: returns [{ path, bytes }] for regular files. */
+  async function tarEntries(gzipStream) {
+    const reader = gzipStream.getReader()
+    const chunks = []
+    let total = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      total += value.length
+      if (total > 512 * 1024 * 1024) break // sanity cap
+    }
+    const bytes = new Uint8Array(total)
+    let off = 0
+    for (const c of chunks) { bytes.set(c, off); off += c.length }
+    const dec = new TextDecoder()
+    const entries = []
+    for (let pos = 0; pos + 512 <= bytes.length;) {
+      const h = bytes.subarray(pos, pos + 512)
+      if (h.every(b => b === 0)) break
+      let name = ''
+      for (let i = 0; i < 100 && h[i] !== 0; i++) name += String.fromCharCode(h[i])
+      // ustar prefix field (345..500) when present (155..255 is checksum /
+      // typeflag / linkname — reading it there corrupts every path)
+      let prefix = ''
+      for (let i = 345; i < 500 && h[i] !== 0; i++) prefix += String.fromCharCode(h[i])
+      const sizeField = dec.decode(h.subarray(124, 136)).replace(/[\0 ]/g, '')
+      const size = parseInt(sizeField || '0', 8) || 0
+      const typeFlag = String.fromCharCode(h[156] || 48)
+      const dataStart = pos + 512
+      const clean = (prefix ? prefix + '/' : '') + name.replace(/^\.\//, '')
+      if ((typeFlag === '0' || typeFlag === '\0') && clean && !clean.endsWith('/')) {
+        entries.push({ path: clean, bytes: bytes.slice(dataStart, dataStart + size) })
+      }
+      pos = dataStart + Math.ceil(size / 512) * 512
+    }
+    return entries
+  }
+
+  /** STORE-method ZIP writer: fixed DOS timestamp, UTF-8 names, no dirs. */
+  function makeZip(entries) {
+    const enc = new TextEncoder()
+    const now = new Date()
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()
+    const chunks = []
+    const central = []
+    let offset = 0
+    const view = (size) => new DataView(new ArrayBuffer(size))
+    for (const e of entries) {
+      const nameB = enc.encode(e.path)
+      const crc = crc32(e.bytes)
+      const lh = view(30)
+      lh.setUint32(0, 0x04034b50, true)
+      lh.setUint16(4, 20, true)        // version needed
+      lh.setUint16(6, 0x0800, true)    // UTF-8 names
+      lh.setUint16(8, 0, true)         // stored
+      lh.setUint16(10, dosTime, true)
+      lh.setUint16(12, dosDate, true)
+      lh.setUint32(14, crc, true)
+      lh.setUint32(18, e.bytes.length, true)
+      lh.setUint32(22, e.bytes.length, true)
+      lh.setUint16(26, nameB.length, true)
+      lh.setUint16(28, 0, true)
+      chunks.push(new Uint8Array(lh.buffer), nameB, e.bytes)
+      central.push({ nameB, crc, size: e.bytes.length, offset })
+      offset += 30 + nameB.length + e.bytes.length
+    }
+    const centralStart = offset
+    for (const c of central) {
+      const ch = view(46)
+      ch.setUint32(0, 0x02014b50, true)
+      ch.setUint16(4, 20, true)
+      ch.setUint16(6, 20, true)
+      ch.setUint16(8, 0x0800, true)
+      ch.setUint16(10, 0, true)
+      ch.setUint16(12, dosTime, true)
+      ch.setUint16(14, dosDate, true)
+      ch.setUint32(16, c.crc, true)
+      ch.setUint32(20, c.size, true)
+      ch.setUint32(24, c.size, true)
+      ch.setUint16(28, c.nameB.length, true)
+      ch.setUint32(42, c.offset, true)
+      chunks.push(new Uint8Array(ch.buffer), c.nameB)
+      offset += 46 + c.nameB.length
+    }
+    const eocd = view(22)
+    eocd.setUint32(0, 0x06054b50, true)
+    eocd.setUint16(8, central.length, true)
+    eocd.setUint16(10, central.length, true)
+    eocd.setUint32(12, offset - centralStart, true)
+    eocd.setUint32(16, centralStart, true)
+    chunks.push(new Uint8Array(eocd.buffer))
+    return new Blob(chunks, { type: 'application/zip' })
+  }
+
+  /** Fetch one pack's tgz and return its file entries. */
+  async function packEntries(name, version) {
+    const res = await fetch(`/tarballs/${encodeURIComponent(name)}-${encodeURIComponent(version)}.tgz`)
+    if (!res.ok) throw new Error(`tarball ${name}@${version}: HTTP ${res.status}`)
+    return tarEntries(res.body.pipeThrough(new DecompressionStream('gzip')))
+  }
+
+  /** Build and download the ZIP for a pack (its files) or a suite (one
+   * folder per member). `button` gets pending/outcome text when passed. */
+  async function downloadZip(kind, name, button, version) {
+    const label = () => { if (button) { button.dataset.orig = button.dataset.orig || button.textContent; button.textContent = t('zipping'); button.disabled = true } }
+    const done = (ok, msg) => {
+      if (!button) return
+      button.disabled = false
+      button.textContent = ok ? button.dataset.orig : `${t('zipFail')}`
+      if (!ok) button.title = msg || ''
+    }
+    label()
+    try {
+      let entries = []
+      let zipName
+      if (kind === 'pack') {
+        if (version) {
+          entries = await packEntries(name, version)
+          zipName = `${name}-${version}.zip`
+        } else {
+          const { pack } = await api(`/api/packs/${encodeURIComponent(name)}`)
+          entries = await packEntries(pack.name, pack.version)
+          zipName = `${pack.name}-${pack.version}.zip`
+        }
+      } else {
+        const { suite, members } = await api(`/api/suites/${encodeURIComponent(name)}`)
+        for (const m of members.filter(m => !m.missing)) {
+          for (const e of await packEntries(m.name, m.version)) {
+            entries.push({ path: `${m.name}/${e.path}`, bytes: e.bytes })
+          }
+        }
+        zipName = `${suite.name}-${suite.version}.zip`
+      }
+      if (!entries.length) throw new Error('no entries')
+      const url = URL.createObjectURL(makeZip(entries))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = zipName
+      a.click()
+      URL.revokeObjectURL(url)
+      done(true)
+    } catch (e) {
+      done(false, e.message)
+    }
+  }
+
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, get supabase() { return supabase } }
 })()
