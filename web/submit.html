@@ -40,19 +40,10 @@
           <p class="muted text-[13px]" id="locked-note" data-i18n="lockedFromArchive"></p>
           <label class="field"><span data-i18n="author"></span><input id="author" required></label>
           <label class="field"><span data-i18n="category"></span>
-            <select id="category">
-              <option value="general">general</option>
-              <option value="business">business</option>
-              <option value="it" selected>it</option>
-              <option value="finance">finance</option>
-              <option value="education">education</option>
-              <option value="entertainment">entertainment</option>
-              <option value="media">media</option>
-              <option value="healthcare">healthcare</option>
-              <option value="legal">legal</option>
-              <option value="engineering">engineering</option>
-              <option value="other">other</option>
-            </select>
+            <div id="tag-group" class="chips !my-1">
+                            <span class="chip cursor-pointer" data-tag="general">general</span><span class="chip cursor-pointer" data-tag="business">business</span><span class="chip active" data-tag="it">it</span><span class="chip cursor-pointer" data-tag="finance">finance</span><span class="chip cursor-pointer" data-tag="education">education</span><span class="chip cursor-pointer" data-tag="entertainment">entertainment</span><span class="chip cursor-pointer" data-tag="media">media</span><span class="chip cursor-pointer" data-tag="healthcare">healthcare</span><span class="chip cursor-pointer" data-tag="legal">legal</span><span class="chip cursor-pointer" data-tag="engineering">engineering</span><span class="chip cursor-pointer" data-tag="other">other</span>
+            </div>
+            <input type="hidden" id="category" value="software">
           </label>
           <label class="field"><span data-i18n="license"></span>
             <select id="license">
@@ -146,7 +137,7 @@
       return null
     }
 
-    // Metadata carried by manifest.json is shown LOCKED (author, category,
+    // Metadata carried by manifest.json is shown LOCKED (author, tags,
     // license, homepage); anything the manifest omits stays editable — the
     // market needs at least an author, so silent blanks would only 403 later.
     function fillMetaFromManifest(manifest) {
@@ -156,10 +147,11 @@
         el.disabled = lock
       }
       bind('author', manifest?.author, manifest?.author !== undefined)
-      bind('category', manifest?.category, manifest?.category !== undefined)
       bind('license', manifest?.license, manifest?.license !== undefined)
       bind('homepage', manifest?.homepage, manifest?.homepage !== undefined)
-      document.getElementById('locked-note').classList.toggle('hidden', !manifest?.author && manifest?.category === undefined && manifest?.license === undefined && manifest?.homepage === undefined)
+      const tags = Array.isArray(manifest?.tags) ? manifest.tags.filter(t => TAG_VALUES.includes(t)) : null
+      setTags(tags ?? ['it'], tags !== null)
+      document.getElementById('locked-note').classList.toggle('hidden', !manifest?.author && tags === null && manifest?.license === undefined && manifest?.homepage === undefined)
       document.getElementById('meta-step').classList.remove('hidden')
     }
 
@@ -177,6 +169,31 @@
       box.classList.remove('hidden')
       fillMetaFromManifest(manifest)
     }
+
+    // Tag multi-select: click chips to toggle; at least one must stay on.
+    const TAG_VALUES = ['general','business','it','finance','education','entertainment','media','healthcare','legal','engineering','other']
+    const chosenTags = new Set(['it'])
+    function selectedTags() { return [...chosenTags] }
+    function setTags(list, locked) {
+      chosenTags.clear()
+      for (const t of list) chosenTags.add(t)
+      document.querySelectorAll('#tag-group .chip').forEach(el => {
+        const on = chosenTags.has(el.dataset.tag)
+        el.classList.toggle('active', on)
+        el.classList.toggle('opacity-50', locked && !on)
+        el.style.pointerEvents = locked ? 'none' : ''
+      })
+      document.getElementById('category').value = selectedTags().join(',')
+    }
+    document.querySelectorAll('#tag-group .chip').forEach(el => {
+      el.addEventListener('click', () => {
+        const t = el.dataset.tag
+        if (chosenTags.has(t)) chosenTags.delete(t)
+        else chosenTags.add(t)
+        el.classList.toggle('active', chosenTags.has(t))
+        document.getElementById('category').value = selectedTags().join(',')
+      })
+    })
 
     document.getElementById('archive').addEventListener('change', async event => {
       const file = event.target.files[0]
@@ -239,7 +256,7 @@
         const form = new FormData()
         form.append('archive', file)
         form.append('author', document.getElementById('author').value)
-        form.append('category', document.getElementById('category').value)
+        form.append('tags', document.getElementById('category').value)
         form.append('license', document.getElementById('license').value)
         form.append('homepage', document.getElementById('homepage').value)
         const res = await MB.api('/api/submissions', { method: 'POST', body: form, auth: true })

@@ -63,3 +63,7 @@ podman run --rm --userns=keep-id -v "$PWD":/workspace -w /workspace/server-rs \
 Read DESIGN.md before visual or UI work: it defines the fonts, colors, spacing, and
 aesthetic direction. Ask the user before departing from it. When reviewing or QA-ing
 UI, flag code that doesn't match DESIGN.md.
+
+## Pack/suite 数据契约（跨仓库）
+
+pack 和 suite 的数据结构（manifest 字段、`/api/index`、`/api/packs`、`/api/suites`、投稿/编辑表单字段、`tags` 数组等）被市场后端、市场前端、docwright 插件（`~/projects/lab/docwright`）三方共享。**唯一事实源：docwright 仓库的 `docs/designs/pack-market-contract.md`**——改任何字段前先读它；改完必须同步：server-rs（结构 + SQL + `supabase/migrations/` 迁移，生产和 market_dev 两库都要跑）、web（页面 + fixture + i18n）、docwright 插件（市场 API 响应类型，须防御式读取兼容旧市场）、契约文档，四处一起改。历史上 category→tags、软件研发→it 两轮都出现过某端静默漏改的 bug——动手前先盘点所有消费点，改完用 assert 式替换并全量跑测试（`scripts/test.sh` 两层）。

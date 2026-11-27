@@ -121,7 +121,7 @@
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.name)}</a>@${MB.esc(p.version)}
             ${p.status === 'disabled' ? `<span class="badge code">${MB.t('disabledBadge')}</span>` : ''}
           </h3>
-          <div class="meta">${chipEl(p.category)}${chipEl(p.author)}${chipEl(p.license)}${p.org ? chipEl('org: ' + p.org) : ''}
+          <div class="meta">${(p.tags || []).map(t => chipEl(t)).join('')}${chipEl(p.author)}${chipEl(p.license)}${p.org ? chipEl('org: ' + p.org) : ''}
             <a class="chip" href="/tarballs/${MB.esc(p.name)}-${MB.esc(p.version)}.tgz" download title="download tgz">↓ tgz</a>
           </div>
           <div class="meta">
@@ -166,7 +166,11 @@
       area.innerHTML = `
         <div class="card mt-2 !bg-slate-50 dark:!bg-slate-950">
           <strong class="text-[13px]">${MB.t('editMeta')}</strong>
-          <label class="field"><span>${MB.t('category')}</span><select class="e-category">${opt(CATEGORY_WHITELIST, p.category)}</select></label>
+          <label class="field"><span>${MB.t('category')}</span>
+            <div class="chips !my-1">
+              ${CATEGORY_WHITELIST.map(v => `<span class="chip cursor-pointer e-tag ${(p.tags || []).includes(v) ? 'active' : ''}" data-tag="${v}">${v}</span>`).join('')}
+            </div>
+          </label>
           <label class="field"><span>${MB.t('license')}</span><select class="e-license">${opt(LICENSE_WHITELIST, p.license)}</select></label>
           <label class="field"><span>${MB.t('author')}</span><input class="e-author" value="${MB.esc(p.author)}"></label>
           <label class="field"><span>${MB.t('homepage')}</span><input class="e-homepage" type="url" placeholder="https://…" value="${MB.esc(p.homepage ?? '')}"></label>
@@ -174,12 +178,16 @@
           <button class="primary e-save">${MB.t('save')}</button>
           <button class="secondary e-cancel">${MB.t('cancel')}</button>
         </div>`
+      area.querySelectorAll('.e-tag').forEach(el => {
+        el.addEventListener('click', () => el.classList.toggle('active'))
+      })
       area.querySelector('.e-cancel').addEventListener('click', () => { area.innerHTML = '' })
       area.querySelector('.e-save').addEventListener('click', async () => {
         const msg = area.querySelector('.e-msg')
         const homepage = area.querySelector('.e-homepage').value.trim()
+        const tags = [...area.querySelectorAll('.e-tag.active')].map(el => el.dataset.tag)
         const body = {
-          category: area.querySelector('.e-category').value,
+          tags,
           license: area.querySelector('.e-license').value,
           author: area.querySelector('.e-author').value,
           homepage: homepage === '' ? null : homepage,

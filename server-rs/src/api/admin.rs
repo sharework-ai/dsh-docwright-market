@@ -25,7 +25,7 @@ pub(crate) struct SubmissionRow {
     pub(crate) uploader: Uuid,
     pub(crate) archive_path: Option<String>,
     pub(crate) report: Value,
-    pub(crate) category: Option<String>,
+    pub(crate) tags: Option<Vec<String>>,
     pub(crate) author: Option<String>,
     pub(crate) license: Option<String>,
     pub(crate) homepage: Option<String>,
@@ -45,7 +45,7 @@ pub async fn queue(
         pack_name: String,
         version: String,
         report: Value,
-        category: Option<String>,
+        tags: Option<Vec<String>>,
         author: Option<String>,
         license: Option<String>,
         homepage: Option<String>,
@@ -54,7 +54,7 @@ pub async fn queue(
         created_at: DateTime<Utc>,
     }
     let rows: Vec<Row> = sqlx::query_as(
-        "select id, pack_name, version, report, category, author, license, homepage, kind, \
+        "select id, pack_name, version, report, tags, author, license, homepage, kind, \
          suite_meta, created_at from submissions where status = 'pending' order by created_at asc",
     )
     .fetch_all(&state.db)
@@ -66,7 +66,7 @@ pub async fn queue(
             "packName": r.pack_name,
             "version": r.version,
             "report": r.report,
-            "category": r.category,
+            "tags": r.tags,
             "author": r.author,
             "license": r.license,
             "homepage": r.homepage,
@@ -160,7 +160,7 @@ pub async fn review(
 ) -> Result<Json<Value>, AppError> {
     let admin: AuthUser = require_admin(&state, &headers).await?;
     let row: Option<SubmissionRow> = sqlx::query_as(
-        "select id, pack_name, version, uploader, archive_path, report, category, author, license, \
+        "select id, pack_name, version, uploader, archive_path, report, tags, author, license, \
          homepage, kind, suite_meta from submissions where id = $1",
     )
     .bind(id)
@@ -269,14 +269,14 @@ pub(crate) async fn upsert_published_pack(
 ) -> Result<(), AppError> {
     let mut tx = db.begin().await?;
     sqlx::query(
-        "insert into packs (name, version, description, category, author, author_id, license, \
+        "insert into packs (name, version, description, tags, author, author_id, license, \
          homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
          content_hash, tarball_path, tarball_sha256, org) \
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
          on conflict (name) do update set \
            version = excluded.version, \
            description = excluded.description, \
-           category = excluded.category, \
+           tags = excluded.tags, \
            author = excluded.author, \
            author_id = excluded.author_id, \
            license = excluded.license, \
@@ -295,7 +295,7 @@ pub(crate) async fn upsert_published_pack(
     .bind(&sub.pack_name)
     .bind(&sub.version)
     .bind(manifest.get("description").cloned().unwrap_or(Value::Null))
-    .bind(sub.category.clone().unwrap_or_else(|| "other".into()))
+    .bind(sub.tags.clone().unwrap_or_else(|| vec!["other".into()]))
     .bind(sub.author.clone().unwrap_or_else(|| sub.pack_name.clone()))
     .bind(sub.uploader) // pack ownership belongs to the submitting account
     .bind(sub.license.clone().unwrap_or_else(|| "MIT".into()))
@@ -366,12 +366,12 @@ pub(crate) async fn publish_suite(db: &sqlx::PgPool, sub: &SubmissionRow) -> Res
         .and_then(|(a,)| a)
         .unwrap_or_else(|| sub.pack_name.clone());
     sqlx::query(
-        "insert into suites (name, version, description, category, author, author_id, members) \
+        "insert into suites (name, version, description, tags, author, author_id, members) \
          values ($1, $2, $3, $4, $5, $6, $7) \
          on conflict (name) do update set \
            version = excluded.version, \
            description = excluded.description, \
-           category = excluded.category, \
+           tags = excluded.tags, \
            author = excluded.author, \
            author_id = excluded.author_id, \
            members = excluded.members, \
@@ -380,7 +380,12 @@ pub(crate) async fn publish_suite(db: &sqlx::PgPool, sub: &SubmissionRow) -> Res
     .bind(&sub.pack_name)
     .bind(&sub.version)
     .bind(meta.get("description").cloned().unwrap_or(json!({ "en": "" })))
-    .bind(meta.get("category").and_then(Value::as_str).unwrap_or("other"))
+    .bind(
+        meta.get("tags")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect::<Vec<_>>())
+            .unwrap_or_else(|| vec!["other".into()]),
+    )
     .bind(&author)
     .bind(sub.uploader)
     .bind(meta.get("members").cloned().unwrap_or(json!([])))

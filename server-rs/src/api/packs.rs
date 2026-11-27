@@ -23,7 +23,7 @@ pub struct PackRow {
     pub name: String,
     pub version: String,
     pub description: Value,
-    pub category: String,
+    pub tags: Vec<String>,
     pub author: String,
     pub author_id: uuid::Uuid,
     pub license: String,
@@ -42,13 +42,13 @@ pub struct PackRow {
     pub updated: DateTime<Utc>,
 }
 
-const PACK_COLUMNS: &str = "name, version, description, category, author, author_id, license, \
+const PACK_COLUMNS: &str = "name, version, description, tags, author, author_id, license, \
      homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
      content_hash, tarball_path, tarball_sha256, org, status, added, updated";
 
 /// GET /api/packs — the browser list page; `?q=word word` turns it into the
 /// keyword search the doc_market_search tool drives (traditional matching —
-/// every term must hit (AND), any field counts (OR): name, category, and
+/// every term must hit (AND), any field counts (OR): name, tags, and
 /// both description languages via ILIKE; parameter binding keeps the terms
 /// literal). The catalog is small; vectors and FTS are deliberately not
 /// involved — the CALLER (the model) decomposes intent into keywords.
@@ -84,7 +84,7 @@ pub async fn list(
             params.push(format!("%{}%", term.to_lowercase()));
             let idx = params.len();
             where_parts.push(format!(
-                "(name ilike ${idx} or category ilike ${idx} or description->>'en' ilike ${idx} or description->>'zh' ilike ${idx})"
+                "(name ilike ${idx} or array_to_string(tags, ' ') ilike ${idx} or description->>'en' ilike ${idx} or description->>'zh' ilike ${idx})"
             ));
         }
         let sql = format!(
@@ -109,7 +109,7 @@ pub async fn list(
         .collect();
     // Suites are listed ALONGSIDE packs (the web list renders them as distinct
     // purple cards): every enabled suite on an unfiltered listing, and only
-    // suites whose name/description/category/members match a search term on a
+    // suites whose name/description/tags/members match a search term on a
     // filtered one — a member-name query lands on its suite card here too.
     let suites: Vec<Value> = crate::api::suites::enabled_suites(&state.db)
         .await?
@@ -120,7 +120,7 @@ pub async fn list(
                     let hay = format!(
                         "{} {} {} {} {}",
                         s["name"].as_str().unwrap_or_default(),
-                        s["category"].as_str().unwrap_or_default(),
+                        s["tags"].as_array().map(|m| m.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
                         s["description"]["en"].as_str().unwrap_or_default(),
                         s["description"]["zh"].as_str().unwrap_or_default(),
                         s["members"].as_array().map(|m| m.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
@@ -200,7 +200,7 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Ap
             "name": r.name,
             "version": r.version,
             "description": r.description,
-            "category": r.category,
+            "tags": r.tags,
             "author": r.author,
             "org": r.org,
             "license": r.license,
@@ -320,7 +320,7 @@ fn pack_json(r: &PackRow) -> Value {
         "name": r.name,
         "version": r.version,
         "description": r.description,
-        "category": r.category,
+        "tags": r.tags,
         "author": r.author,
         "org": r.org,
         "license": r.license,

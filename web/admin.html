@@ -56,7 +56,7 @@
         <div class="card" style="margin-bottom:1rem">
           <h3>${MB.esc(item.packName)}@${MB.esc(item.version)}
             <span class="chip ${item.kind === 'suite' ? 'active' : ''}">${MB.t(item.kind === 'suite' ? 'kindSuite' : 'kindPack')}</span>
-            <span class="chip">${MB.esc(item.category || '')}</span>
+            <span class="chip">${MB.esc((item.tags || []).join('/'))}</span>
             <span class="chip">${MB.esc(item.author || '')}</span>${item.kind === 'pack' ? ` <span class="chip">${MB.esc(item.license || '')}</span>` : ''}</h3>
           ${item.kind === 'suite' ? `
             <div class="desc">${MB.esc(MB.localizedDesc(item.suiteMeta?.description))}</div>

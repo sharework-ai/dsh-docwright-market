@@ -26,21 +26,9 @@
       <form id="suite-form" class="hidden">
         <label class="field"><span data-i18n="suiteName"></span><input id="s-name" placeholder="cosmic" required></label>
         <label class="field"><span data-i18n="suiteVersion"></span><input id="s-version" placeholder="1.0.0" required></label>
-        <label class="field"><span data-i18n="category"></span>
-          <select id="s-category">
-            <option value="general">general</option>
-            <option value="business">business</option>
-            <option value="it" selected>it</option>
-            <option value="finance">finance</option>
-            <option value="education">education</option>
-            <option value="entertainment">entertainment</option>
-            <option value="home">home</option>
-            <option value="healthcare">healthcare</option>
-            <option value="legal">legal</option>
-            <option value="construction">construction</option>
-            <option value="other">other</option>
-          </select>
-        </label>
+          <div id="tag-group" class="chips !my-1">
+            <span class="chip cursor-pointer" data-tag="general">general</span><span class="chip cursor-pointer" data-tag="business">business</span><span class="chip active" data-tag="it">it</span><span class="chip cursor-pointer" data-tag="finance">finance</span><span class="chip cursor-pointer" data-tag="education">education</span><span class="chip cursor-pointer" data-tag="entertainment">entertainment</span><span class="chip cursor-pointer" data-tag="media">media</span><span class="chip cursor-pointer" data-tag="healthcare">healthcare</span><span class="chip cursor-pointer" data-tag="legal">legal</span><span class="chip cursor-pointer" data-tag="engineering">engineering</span><span class="chip cursor-pointer" data-tag="other">other</span>
+          </div>
         <label class="field"><span data-i18n="suiteDescEn"></span><input id="s-desc-en" required></label>
         <label class="field"><span data-i18n="suiteDescZh"></span><input id="s-desc-zh"></label>
 
@@ -131,6 +119,7 @@
       if (gated) return
 
       catalog = (await MB.api('/api/packs').catch(() => ({ packs: [] }))).packs
+      if (!editing) chosenTags.add('it')
       if (editing) {
         const { suites } = await MB.api('/api/my/suites', { auth: true })
         const suite = suites.find(st => st.name === editing)
@@ -143,7 +132,8 @@
         document.getElementById('s-version').value = suite.version
         document.getElementById('s-desc-en').value = suite.description?.en || ''
         document.getElementById('s-desc-zh').value = suite.description?.zh || ''
-        if (suite.category) document.getElementById('s-category').value = suite.category
+        ;(suite.tags || []).forEach(t => chosenTags.add(t))
+        syncTagGroup()
         ;(suite.members || []).forEach(m => chosen.add(m))
         document.getElementById('btn-save').textContent = MB.t('editSuite')
         document.title = `${MB.t('suiteMaint')}: ${suite.name}`
@@ -151,6 +141,20 @@
       renderChosen()
       renderList()
     }
+
+    // Tag multi-select (shared contract: the server stores tags as text[])
+    const chosenTags = new Set() // create mode gets the 'it' default below; edit mode reads suite.tags
+    function syncTagGroup() {
+      document.querySelectorAll('#tag-group .chip').forEach(el => el.classList.toggle('active', chosenTags.has(el.dataset.tag)))
+    }
+    document.querySelectorAll('#tag-group .chip').forEach(el => {
+      el.addEventListener('click', () => {
+        const t = el.dataset.tag
+        if (chosenTags.has(t)) chosenTags.delete(t)
+        else chosenTags.add(t)
+        syncTagGroup()
+      })
+    })
 
     document.getElementById('pick-filter').addEventListener('input', renderList)
 
@@ -166,7 +170,7 @@
         description: Object.assign(
           { en: document.getElementById('s-desc-en').value.trim() },
           document.getElementById('s-desc-zh').value.trim() ? { zh: document.getElementById('s-desc-zh').value.trim() } : {}),
-        category: document.getElementById('s-category').value,
+        tags: [...chosenTags],
         members: [...chosen],
       }
       try {

@@ -109,7 +109,7 @@ if (index.format !== 1 && index.format !== 2) die(`unsupported index format: ${i
 if (listOnly) {
   for (const p of index.packs) {
     const versions = p.versions?.length ? ` (${p.versions.length} versions)` : ''
-    console.log(`${p.name}@${p.version} [${p.category}]${p.org ? ` <${p.org}>` : ''}${versions} ${p.hasFunctionRules ? '(functions.js) ' : ''}${p.description?.en ?? ''}`)
+    console.log(`${p.name}@${p.version} [${(p.tags || []).join('/')}]${p.org ? ` <${p.org}>` : ''}${versions} ${p.hasFunctionRules ? '(functions.js) ' : ''}${p.description?.en ?? ''}`)
   }
   console.log(`\n${index.packs.length} pack(s); market: ${market}`)
   process.exit(0)

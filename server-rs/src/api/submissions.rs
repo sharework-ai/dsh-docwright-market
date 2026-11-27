@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::auth::{require_admin, require_org, require_user, AuthUser};
-use crate::config::{CATEGORY_WHITELIST, LICENSE_WHITELIST, MAX_ARCHIVE_BYTES};
+use crate::config::{LICENSE_WHITELIST, MAX_ARCHIVE_BYTES, TAG_WHITELIST};
 use crate::error::AppError;
 use crate::semver;
 use crate::state::AppState;
@@ -34,7 +34,7 @@ struct SubmissionRow {
 }
 
 /// POST /api/submissions — multipart/form-data:
-///   archive=<file.tgz>, author=<display name>, category, license, [homepage]
+///   archive=<file.tgz>, author=<display name>, tags (comma-separated), license, [homepage]
 pub async fn submit(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -69,14 +69,14 @@ pub async fn submit(
                 archive = Some(bytes.to_vec());
             }
             "author" => form.author = Some(read_text(field).await?),
-            "category" => form.category = Some(read_text(field).await?),
+            "tags" => form.tags = Some(read_text(field).await?),
             "license" => form.license = Some(read_text(field).await?),
             "homepage" => form.homepage = Some(read_text(field).await?),
             _ => {}
         }
     }
     let archive = archive.ok_or_else(|| AppError::bad_request("missing archive field"))?;
-    let (author, category, license, homepage) = form.into_validated()?;
+    let (author, tags, license, homepage) = form.into_validated()?;
 
     // 1. Machine verification via the sidecar — the only pack-semantics judge.
     let verification: Value = state
@@ -133,7 +133,7 @@ pub async fn submit(
 
     sqlx::query(
         "insert into submissions (id, pack_name, version, uploader, report, archive_path, \
-         category, author, license, homepage) \
+         tags, author, license, homepage) \
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(&submission_id)
@@ -142,7 +142,7 @@ pub async fn submit(
     .bind(user.id)
     .bind(&report)
     .bind(&archive_path)
-    .bind(&category)
+    .bind(&tags)
     .bind(&author)
     .bind(&license)
     .bind(&homepage)
@@ -155,7 +155,7 @@ pub async fn submit(
 #[derive(Default)]
 struct FormFields {
     author: Option<String>,
-    category: Option<String>,
+    tags: Option<String>,
     license: Option<String>,
     homepage: Option<String>,
 }
@@ -170,14 +170,25 @@ async fn read_text(field: axum::extract::multipart::Field<'_>) -> Result<String,
 }
 
 impl FormFields {
-    fn into_validated(self) -> Result<(String, String, String, Option<String>), AppError> {
+    fn into_validated(self) -> Result<(String, Vec<String>, String, Option<String>), AppError> {
         let author = non_empty(self.author, "author")?;
-        let category = non_empty(self.category, "category")?;
         let license = non_empty(self.license, "license")?;
-        if !CATEGORY_WHITELIST.contains(&category.as_str()) {
+        let tags: Vec<String> = self
+            .tags
+            .as_deref()
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(String::from)
+            .collect();
+        if tags.is_empty() {
+            return Err(AppError::bad_request("tags is required (comma-separated)"));
+        }
+        if let Some(bad) = tags.iter().find(|t| !TAG_WHITELIST.contains(&t.as_str())) {
             return Err(AppError::bad_request(format!(
-                "category must be one of: {}",
-                CATEGORY_WHITELIST.join(", ")
+                "tags must be from: {}",
+                TAG_WHITELIST.join(", ")
             )));
         }
         if !LICENSE_WHITELIST.contains(&license.as_str()) {
@@ -195,7 +206,7 @@ impl FormFields {
             }
             _ => None,
         };
-        Ok((author, category, license, homepage))
+        Ok((author, tags, license, homepage))
     }
 }
 

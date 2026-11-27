@@ -50,9 +50,9 @@ pub(crate) async fn seed_profile(pool: &PgPool, id: Uuid, org: Option<&str>) {
 
 pub(crate) async fn seed_pack(pool: &PgPool, name: &str, version: &str, author_id: Uuid, hash: &str) {
     sqlx::query(
-        "insert into packs (name, version, description, category, author, author_id, license, \
+        "insert into packs (name, version, description, tags, author, author_id, license, \
          content_hash, tarball_path, tarball_sha256) \
-         values ($1, $2, $3, 'dev', 'author', $4, 'MIT', $5, 'tarballs/x.tgz', 'sha256:x')",
+         values ($1, $2, $3, ARRAY['it']::text[], 'author', $4, 'MIT', $5, 'tarballs/x.tgz', 'sha256:x')",
     )
     .bind(name)
     .bind(version)
@@ -89,8 +89,8 @@ pub(crate) async fn seed_submission(
 
 pub(crate) async fn seed_suite(pool: &PgPool, name: &str, members: &[&str], enabled: bool, author_id: Uuid) {
     sqlx::query(
-        "insert into suites (name, version, description, category, author, author_id, members, enabled) \
-         values ($1, '1.0.0', $2::jsonb, 'dev', 'author', $3, $4::jsonb, $5)",
+        "insert into suites (name, version, description, tags, author, author_id, members, enabled) \
+         values ($1, '1.0.0', $2::jsonb, ARRAY['it']::text[], 'author', $3, $4::jsonb, $5)",
     )
     .bind(name)
     .bind(r#"{"en":"seed suite","zh":"种子套件"}"#)
@@ -107,7 +107,7 @@ fn suite_meta(name: &str, version: &str, members: &[&str]) -> SuiteMeta {
         "name": name,
         "version": version,
         "description": { "en": "a suite", "zh": "套件" },
-        "category": "it",
+        "tags": ["it"],
         "members": members,
     }))
     .expect("valid suite meta")
@@ -215,7 +215,7 @@ async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
         uploader,
         archive_path: Some("archive.tgz".into()),
         report: json!({}),
-        category: Some("dev".into()),
+        tags: Some(vec!["it".into()]),
         author: Some("sharework-ai".into()),
         license: Some("MIT".into()),
         homepage: None,
@@ -233,8 +233,8 @@ async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
         .await
         .expect("first publish writes the row");
 
-    let row: (String, Value, bool, bool, String, String, Option<String>, String) = sqlx::query_as(
-        "select version, description, has_function_rules, requires_topic, category, author, \
+    let row: (String, Value, bool, bool, Vec<String>, String, Option<String>, String) = sqlx::query_as(
+        "select version, description, has_function_rules, requires_topic, tags, author, \
          org, status from packs where name = 'published-pack'",
     )
     .fetch_one(&pool)
@@ -244,7 +244,7 @@ async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
     assert_eq!(row.1, json!({ "en": "eng", "zh": "中文" }));
     assert!(row.2, "has_function_rules from the report");
     assert!(row.3, "requiresTopic from the manifest");
-    assert_eq!(row.4, "dev");
+    assert_eq!(row.4, vec!["it".to_string()]);
     assert_eq!(row.5, "sharework-ai");
     assert_eq!(row.6.as_deref(), Some("sharework-ai"), "org stamped from the uploader profile");
     assert_eq!(row.7, "active", "new packs start active");
@@ -273,7 +273,7 @@ async fn update_publish_overwrites_but_keeps_added(pool: PgPool) {
         uploader,
         archive_path: None,
         report: json!({}),
-        category: Some("dev".into()),
+        tags: Some(vec!["it".into()]),
         author: Some("a".into()),
         license: Some("MIT".into()),
         homepage: None,
@@ -336,7 +336,7 @@ async fn republishing_keeps_a_disabled_pack_disabled(pool: PgPool) {
         uploader,
         archive_path: None,
         report: json!({}),
-        category: Some("dev".into()),
+        tags: Some(vec!["it".into()]),
         author: Some("a".into()),
         license: Some("MIT".into()),
         homepage: None,
@@ -448,7 +448,7 @@ async fn seed_full_pack(pool: &PgPool, name: &str) -> Uuid {
             "checkedAt": "2026-11-06T00:00:00Z",
             "manifest": {},
         }),
-        category: Some("dev".into()),
+        tags: Some(vec!["it".into()]),
         author: Some("sharework-ai".into()),
         license: Some("MIT".into()),
         homepage: None,
@@ -619,7 +619,7 @@ async fn detail_lists_versions_newest_first(pool: PgPool) {
         uploader,
         archive_path: None,
         report: json!({ "manifest": {} }),
-        category: Some("dev".into()),
+        tags: Some(vec!["it".into()]),
         author: Some("a".into()),
         license: Some("MIT".into()),
         homepage: None,
@@ -771,22 +771,22 @@ async fn auth_gated_routes_reject_missing_and_bogus_tokens(pool: PgPool) {
 async fn suite_form_rejects_bad_shapes(_pool: PgPool) {
     init_log();
     let bad = |body: Value| SuiteMeta::parse(&body).expect_err("must fail");
-    assert!(bad(json!({ "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": ["a"] }))
+    assert!(bad(json!({ "version": "1.0.0", "description": {"en": "x"}, "tags": ["it"], "members": ["a"] }))
         .message
         .contains("name"));
-    assert!(bad(json!({ "name": "Bad_Name", "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": ["a"] }))
+    assert!(bad(json!({ "name": "Bad_Name", "version": "1.0.0", "description": {"en": "x"}, "tags": ["it"], "members": ["a"] }))
         .message
         .contains("kebab-case"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"zh": "只有中文"}, "category": "it", "members": ["a"] }))
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"zh": "只有中文"}, "tags": ["it"], "members": ["a"] }))
         .message
         .contains("description.en"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "nope", "members": ["a"] }))
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "tags": ["nope"], "members": ["a"] }))
         .message
-        .contains("category"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": [] }))
+        .contains("tags"));
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "tags": ["it"], "members": [] }))
         .message
         .contains("at least one member"));
-    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "category": "it", "members": ["a", "a"] }))
+    assert!(bad(json!({ "name": "ok-suite", "version": "1.0.0", "description": {"en": "x"}, "tags": ["it"], "members": ["a", "a"] }))
         .message
         .contains("duplicate member"));
 }
@@ -808,8 +808,8 @@ async fn suite_members_must_exist_and_versions_must_increase(pool: PgPool) {
         .await
         .expect("existing members pass");
 
-    sqlx::query("insert into suites (name, version, description, category, author, author_id, members) \
-         values ('s', '1.0.0', '{}'::jsonb, 'dev', 'a', $1, '[]'::jsonb)")
+    sqlx::query("insert into suites (name, version, description, tags, author, author_id, members) \
+         values ('s', '1.0.0', '{}'::jsonb, ARRAY['it']::text[], 'a', $1, '[]'::jsonb)")
         .bind(author.id)
         .execute(&pool)
         .await
@@ -838,7 +838,7 @@ async fn suite_submission_row(pool: &PgPool, name: &str, version: &str, uploader
     .await
     .unwrap();
     sqlx::query_as::<_, SubmissionRow>(
-        "select id, pack_name, version, uploader, archive_path, report, category, author, license, \
+        "select id, pack_name, version, uploader, archive_path, report, tags, author, license, \
          homepage, kind, suite_meta from submissions where id = $1",
     )
     .bind(id)
@@ -858,7 +858,7 @@ async fn approving_a_suite_submission_upserts_the_catalog(pool: PgPool) {
         "name": "cosmic",
         "version": "1.0.0",
         "description": { "en": "cosmic suite", "zh": "宇宙套件" },
-        "category": "business",
+        "tags": ["business"],
         "members": ["member-a", "member-b"],
     });
     let sub = suite_submission_row(&pool, "cosmic", "1.0.0", author, meta.clone()).await;

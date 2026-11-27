@@ -186,7 +186,7 @@ async fn submit_happy_path_verifies_uploads_and_enqueues(pool: PgPool) {
     let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
 
     let (boundary, body) = multipart_body(
-        &[("author", "author"), ("category", "it"), ("license", "MIT")],
+        &[("author", "author"), ("tags", "it"), ("license", "MIT")],
         b"fake archive bytes",
     );
     let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
@@ -220,7 +220,7 @@ async fn machine_rejected_submission_stores_nothing(pool: PgPool) {
     let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
 
     let (boundary, body) = multipart_body(
-        &[("author", "author"), ("category", "it"), ("license", "MIT")],
+        &[("author", "author"), ("tags", "it"), ("license", "MIT")],
         b"garbage",
     );
     let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
@@ -254,7 +254,7 @@ async fn approve_publishes_from_the_mocked_chain(pool: PgPool) {
 
     // Submit through the real handler first (uploads the archive via mock).
     let (boundary, body) = multipart_body(
-        &[("author", "author"), ("category", "it"), ("license", "MIT")],
+        &[("author", "author"), ("tags", "it"), ("license", "MIT")],
         b"fake archive bytes",
     );
     let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
@@ -550,16 +550,16 @@ async fn submit_rejects_bad_form_fields_before_the_verifier(pool: PgPool) {
     let (supabase, verifier) = start_mocks(author, author, author, true).await;
     let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
 
-    for category in ["nope", ""] {
+    for tagValue in ["nope", ""] {
         let (boundary, body) = multipart_body(
-            &[("author", "a"), ("category", category), ("license", "MIT")],
+            &[("author", "a"), ("tags", tagValue), ("license", "MIT")],
             b"bytes",
         );
         let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "category {category:?}");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "tags {tagValue:?}");
     }
     let (boundary, body) = multipart_body(
-        &[("author", "a"), ("category", "it"), ("license", "Proprietary-9")],
+        &[("author", "a"), ("tags", "it"), ("license", "Proprietary-9")],
         b"bytes",
     );
     let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
@@ -599,7 +599,7 @@ async fn submit_without_an_org_is_refused_before_any_side_effects(pool: PgPool) 
     let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
 
     let (boundary, body) = multipart_body(
-        &[("author", "a"), ("category", "it"), ("license", "MIT")],
+        &[("author", "a"), ("tags", "it"), ("license", "MIT")],
         b"bytes",
     );
     let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
@@ -619,7 +619,7 @@ async fn submit_without_an_org_is_refused_before_any_side_effects(pool: PgPool) 
     assert_eq!(json_body(set).await["packsAffected"], 0);
 
     let (boundary, body) = multipart_body(
-        &[("author", "a"), ("category", "it"), ("license", "MIT")],
+        &[("author", "a"), ("tags", "it"), ("license", "MIT")],
         b"bytes",
     );
     let response = post_multipart(&app, TOK_AUTHOR, body, &boundary).await;
@@ -653,7 +653,7 @@ async fn my_routes_are_identity_gated(pool: PgPool) {
 
     // Mutations on someone else's pack are refused, not leaked.
     for (method, uri, body) in [
-        ("PATCH", "/api/my/packs/owned-pack", r#"{"category":"it"}"#),
+        ("PATCH", "/api/my/packs/owned-pack", r#"{"tags":["it"]}"#),
         ("POST", "/api/my/packs/owned-pack/disable", ""),
         ("POST", "/api/my/packs/owned-pack/enable", ""),
         ("DELETE", "/api/my/packs/owned-pack", ""),
@@ -739,7 +739,7 @@ async fn patch_updates_owner_metadata_with_whitelist_checks(pool: PgPool) {
     let (supabase, verifier) = start_mocks(author, author, author, true).await;
     let app = crate::build_router(state_for(&pool, &supabase, &verifier), "");
 
-    let bad = json_request(&app, "PATCH", "/api/my/packs/meta-pack", TOK_AUTHOR, r#"{"category":"nope"}"#).await;
+    let bad = json_request(&app, "PATCH", "/api/my/packs/meta-pack", TOK_AUTHOR, r#"{"tags":["nope"]}"#).await;
     assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
     let bad = json_request(&app, "PATCH", "/api/my/packs/meta-pack", TOK_AUTHOR, r#"{"license":"Proprietary-9"}"#).await;
     assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
@@ -764,12 +764,12 @@ async fn patch_updates_owner_metadata_with_whitelist_checks(pool: PgPool) {
         "PATCH",
         "/api/my/packs/meta-pack",
         TOK_AUTHOR,
-        r#"{"category":"general","license":"ISC","author":"New Name","homepage":null}"#,
+        r#"{"tags":["general"],"license":"ISC","author":"New Name","homepage":null}"#,
     )
     .await;
     assert_eq!(ok.status(), StatusCode::OK);
     let pack = json_body(ok).await["pack"].clone();
-    assert_eq!(pack["category"], "general");
+    assert_eq!(pack["tags"], json!(["general"]));
     assert_eq!(pack["license"], "ISC");
     assert_eq!(pack["author"], "New Name");
     assert!(pack["homepage"].is_null(), "explicit null clears the homepage");
@@ -958,7 +958,7 @@ fn suite_form(name: &str, version: &str, members: &[&str]) -> String {
         "name": name,
         "version": version,
         "description": { "en": "the cosmic suite", "zh": "宇宙套件" },
-        "category": "business",
+        "tags": ["business"],
         "members": members,
     })
     .to_string()

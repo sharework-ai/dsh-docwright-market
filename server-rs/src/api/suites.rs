@@ -16,7 +16,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::auth::{require_org, require_user};
-use crate::config::CATEGORY_WHITELIST;
+use crate::config::TAG_WHITELIST;
 use crate::error::AppError;
 use crate::semver;
 use crate::state::AppState;
@@ -42,13 +42,13 @@ pub(crate) struct SuiteMeta {
     pub name: String,
     pub version: String,
     pub description: Value,
-    pub category: String,
+    pub tags: Vec<String>,
     pub members: Vec<String>,
 }
 
 impl SuiteMeta {
     /// Parse + shape-validate the form: name slug, bilingual description,
-    /// whitelisted category, non-empty version, deduplicated member list.
+    /// whitelisted tags (each element), non-empty version, deduplicated member list.
     /// Member existence (against `packs`) is DB work — see check_suite_rules.
     pub(crate) fn parse(body: &Value) -> Result<SuiteMeta, AppError> {
         let name = body
@@ -72,15 +72,18 @@ impl SuiteMeta {
         if en.is_empty() {
             return Err(AppError::bad_request("description.en must be a non-empty string"));
         }
-        let category = body
-            .get("category")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .ok_or_else(|| AppError::bad_request("missing required field: category"))?;
-        if !CATEGORY_WHITELIST.contains(&category) {
+        let tags: Vec<String> = body
+            .get("tags")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::trim).filter(|t| !t.is_empty()).map(String::from).collect())
+            .unwrap_or_default();
+        if tags.is_empty() {
+            return Err(AppError::bad_request("missing required field: tags (a non-empty array)"));
+        }
+        if let Some(bad) = tags.iter().find(|t| !TAG_WHITELIST.contains(&t.as_str())) {
             return Err(AppError::bad_request(format!(
-                "category must be one of: {}",
-                CATEGORY_WHITELIST.join(", ")
+                "tags must be from: {}",
+                TAG_WHITELIST.join(", ")
             )));
         }
         let members = body
@@ -109,7 +112,7 @@ impl SuiteMeta {
                 "en": en,
                 "zh": description.get("zh").and_then(Value::as_str).unwrap_or(""),
             }),
-            category: category.to_string(),
+            tags,
             members: names,
         })
     }
@@ -119,7 +122,7 @@ impl SuiteMeta {
             "name": self.name,
             "version": self.version,
             "description": self.description,
-            "category": self.category,
+            "tags": self.tags,
             "members": self.members,
         })
     }
@@ -209,7 +212,7 @@ struct SuiteRow {
     name: String,
     version: String,
     description: Value,
-    category: String,
+    tags: Vec<String>,
     author: String,
     author_id: Uuid,
     members: Value,
@@ -218,7 +221,7 @@ struct SuiteRow {
     updated: DateTime<Utc>,
 }
 
-const SUITE_COLUMNS: &str = "name, version, description, category, author, author_id, \
+const SUITE_COLUMNS: &str = "name, version, description, tags, author, author_id, \
      members, enabled, added, updated";
 
 fn suite_json(r: &SuiteRow) -> Value {
@@ -226,7 +229,7 @@ fn suite_json(r: &SuiteRow) -> Value {
         "name": r.name,
         "version": r.version,
         "description": r.description,
-        "category": r.category,
+        "tags": r.tags,
         "author": r.author,
         "members": r.members,
         "added": r.added.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),

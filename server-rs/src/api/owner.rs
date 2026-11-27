@@ -14,7 +14,7 @@ use sqlx::FromRow;
 use uuid::Uuid;
 
 use crate::auth::{require_admin, require_user, AuthUser};
-use crate::config::{CATEGORY_WHITELIST, LICENSE_WHITELIST};
+use crate::config::{LICENSE_WHITELIST, TAG_WHITELIST};
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::storage;
@@ -25,7 +25,7 @@ struct PackRow {
     version: String,
     org: Option<String>,
     status: String,
-    category: String,
+    tags: Vec<String>,
     author: String,
     author_id: Uuid,
     license: String,
@@ -34,7 +34,7 @@ struct PackRow {
     updated: chrono::DateTime<chrono::Utc>,
 }
 
-const OWNER_PACK_COLUMNS: &str = "name, version, org, status, category, author, author_id, \
+const OWNER_PACK_COLUMNS: &str = "name, version, org, status, tags, author, author_id, \
      license, homepage, added, updated";
 
 fn pack_json(r: &PackRow) -> Value {
@@ -43,7 +43,7 @@ fn pack_json(r: &PackRow) -> Value {
         "version": r.version,
         "org": r.org,
         "status": r.status,
-        "category": r.category,
+        "tags": r.tags,
         "author": r.author,
         "license": r.license,
         "homepage": r.homepage,
@@ -124,13 +124,19 @@ pub async fn patch_pack(
     let user = require_user(&state, &headers).await?;
     owned_pack(&state, &user, &name).await?;
 
-    let category = opt_str(&body, "category")?;
-    if let Some(c) = &category {
-        if !CATEGORY_WHITELIST.contains(&c.as_str()) {
+    let tags: Option<Vec<String>> = body
+        .get("tags")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(str::trim).filter(|t| !t.is_empty()).map(String::from).collect());
+    if let Some(ts) = &tags {
+        if let Some(bad) = ts.iter().find(|t| !TAG_WHITELIST.contains(&t.as_str())) {
             return Err(AppError::bad_request(format!(
-                "category must be one of: {}",
-                CATEGORY_WHITELIST.join(", ")
+                "tags must be from: {}",
+                TAG_WHITELIST.join(", ")
             )));
+        }
+        if ts.is_empty() {
+            return Err(AppError::bad_request("tags must be a non-empty array"));
         }
     }
     let license = opt_str(&body, "license")?;
@@ -154,9 +160,9 @@ pub async fn patch_pack(
             return Err(AppError::bad_request("author must not be empty"));
         }
     }
-    if category.is_none() && license.is_none() && homepage.is_none() && author.is_none() {
+    if tags.is_none() && license.is_none() && homepage.is_none() && author.is_none() {
         return Err(AppError::bad_request(
-            "nothing to update: send at least one of category/license/homepage/author",
+            "nothing to update: send at least one of tags/license/homepage/author",
         ));
     }
     if let Some(Some(h)) = &homepage {
@@ -167,7 +173,7 @@ pub async fn patch_pack(
 
     sqlx::query(
         "update packs set \
-           category = coalesce($2, category), \
+           tags = coalesce($2, tags), \
            license = coalesce($3, license), \
            homepage = case when $4 then $5 else homepage end, \
            author = coalesce($6, author), \
@@ -175,7 +181,7 @@ pub async fn patch_pack(
          where name = $1",
     )
     .bind(&name)
-    .bind(&category)
+    .bind(&tags)
     .bind(&license)
     .bind(homepage.is_some())
     .bind(homepage.clone().flatten())

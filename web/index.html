@@ -33,16 +33,17 @@
 
     function render() {
       const q = document.getElementById('search').value.trim().toLowerCase()
+      const inTags = (item) => !activeCategory || (item.tags || []).includes(activeCategory)
       const packs = packsAll.filter(p => {
-        if (activeCategory && p.category !== activeCategory) return false
+        if (!inTags(p)) return false
         if (!q) return true
-        const hay = [p.name, p.author, p.org, MB.localizedDesc(p.description)].join(' ').toLowerCase()
+        const hay = [p.name, p.author, p.org, (p.tags || []).join(' '), MB.localizedDesc(p.description)].join(' ').toLowerCase()
         return hay.includes(q)
       })
       const suites = suitesAll.filter(s => {
-        if (activeCategory && s.category !== activeCategory) return false
+        if (!inTags(s)) return false
         if (!q) return true
-        const hay = [s.name, s.category, MB.localizedDesc(s.description), (s.members || []).join(' ')].join(' ').toLowerCase()
+        const hay = [s.name, (s.tags || []).join(' '), MB.localizedDesc(s.description), (s.members || []).join(' ')].join(' ').toLowerCase()
         return hay.includes(q)
       })
       const grid = document.getElementById('packs')
@@ -53,7 +54,7 @@
             <span class="chip suite-chip" title="${MB.esc((s.members || []).join(', '))}">${MB.t('kindSuite')}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(s.description))}</div>
           <div class="meta">
-            <span class="chip">${MB.esc(MB.t('cat_' + s.category))}</span>
+            ${(s.tags || []).map(t => `<span class="chip">${MB.esc(MB.t('cat_' + t))}</span>`).join('')}
             ${(s.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
             ${(s.members || []).length > 5 ? `<span class="chip">+${s.members.length - 5}</span>` : ''}
             <a class="chip" href="#" data-zip-suite="${MB.esc(s.name)}" title="${MB.esc(MB.t('downloadZip'))}">↓ zip</a>
@@ -64,7 +65,7 @@
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(p.version)}</span></h3>
           <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
           <div class="meta">
-            <span class="chip">${MB.esc(MB.t('cat_' + p.category))}</span>
+            ${(p.tags || []).map(t => `<span class="chip">${MB.esc(MB.t('cat_' + t))}</span>`).join('')}
             <span class="chip">${MB.esc(p.author)}</span>
             ${p.org ? `<span class="chip">org: ${MB.esc(p.org)}</span>` : ''}
             <span class="chip">${MB.esc(p.license)}</span>
@@ -89,7 +90,7 @@
     }
 
     function renderChips() {
-      const cats = [...new Set(packsAll.concat(suitesAll).map(p => p.category))].sort()
+      const cats = [...new Set(packsAll.concat(suitesAll).flatMap(p => p.tags || []))].sort()
       const chips = document.getElementById('chips')
       chips.innerHTML = [`<span class="chip ${!activeCategory ? 'active' : ''}" data-cat="">${MB.esc(MB.t('cat_all'))}</span>`]
         .concat(cats.map(c => `<span class="chip ${activeCategory === c ? 'active' : ''}" data-cat="${MB.esc(c)}">${MB.esc(MB.t('cat_' + c))}</span>`))
