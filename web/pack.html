@@ -36,7 +36,7 @@
         <h1>${MB.esc(MB.displayTitle(pack))}
           <span class="font-mono text-2xl font-semibold text-primary dark:text-accent-strong align-middle">${MB.esc(pack.org ? pack.org + '/' : '')}${MB.esc(pack.name)}@${MB.esc(pack.version)}</span>
           ${pack.org ? `<span class="chip align-middle">org: ${MB.esc(pack.org)}</span>` : ''}
-          ${pack.suite ? `<a class="chip align-middle" href="/suite.html?name=${encodeURIComponent(pack.suite)}" title="${MB.esc(MB.t('suiteBadge'))}">${MB.esc(MB.t('suiteBadge'))}: ${MB.esc(pack.suite)}</a>` : ''}</h1>
+          ${pack.suite ? (() => { const code = pack.suite.split('/').pop(); return `<a class="chip align-middle" href="/suite.html?name=${encodeURIComponent(code)}" title="${MB.esc(MB.t('suiteBadge'))}">${MB.esc(MB.t('suiteBadge'))}: ${MB.esc(pack.suite)}</a>` })() : ''}</h1>
         <div id="assets-gallery" class="hidden mb-4 flex flex-wrap gap-3"></div>
         <p class="max-w-xl text-slate-500 dark:text-slate-400">${desc}</p>
         ${suiteLinks ? `<div class="meta"><span class="muted text-sm">${MB.t('belongsTo')}:</span> ${suiteLinks}</div>` : ''}

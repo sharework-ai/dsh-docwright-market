@@ -880,6 +880,20 @@ window.MB = (() => {
         zipName = `${pack.name}-${effective}.zip`
       } else {
         const { suite, members } = await api(`/api/suites/${encodeURIComponent(name)}`)
+        // The suite's own manifest — same file layout convention as packs.
+        entries.push({
+          path: `${suite.name}/manifest.json`,
+          bytes: new TextEncoder().encode(JSON.stringify({
+            name: suite.name,
+            org: suite.org ?? null,
+            version: suite.version,
+            title: suite.title ?? null,
+            description: suite.description ?? null,
+            tags: suite.tags ?? [],
+            members: suite.members ?? [],
+            kind: 'suite',
+          }, null, 2)),
+        })
         for (const m of members.filter(m => !m.missing)) {
           // The published tarball already carries the pack's own top-level
           // folder (tar -C packDir .) — adding another prefix nested it twice.

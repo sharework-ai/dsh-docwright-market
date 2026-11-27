@@ -923,6 +923,7 @@ async fn suite_publish_stamps_and_clears_the_pack_flag(pool: PgPool) {
     init_log();
     let author = Uuid::new_v4();
     seed_user(&pool, author).await;
+    seed_profile(&pool, author, Some("test-org")).await;
     seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
     seed_pack(&pool, "member-b", "0.1.0", author, "sha256:b").await;
     seed_pack(&pool, "pushed-out", "0.1.0", author, "sha256:c").await;
@@ -943,9 +944,9 @@ async fn suite_publish_stamps_and_clears_the_pack_flag(pool: PgPool) {
     assert_eq!(
         flagged,
         vec![
-            ("member-a".to_string(), Some("cosmic".to_string())),
-            ("member-b".to_string(), Some("cosmic".to_string())),
-            ("pushed-out".to_string(), Some("cosmic".to_string())),
+            ("member-a".to_string(), Some("test-org/cosmic".to_string())),
+            ("member-b".to_string(), Some("test-org/cosmic".to_string())),
+            ("pushed-out".to_string(), Some("test-org/cosmic".to_string())),
         ]
     );
     let (title,): (Value,) = sqlx::query_as("select title from suites where name = 'cosmic'")
@@ -967,8 +968,8 @@ async fn suite_publish_stamps_and_clears_the_pack_flag(pool: PgPool) {
     assert_eq!(
         flagged,
         vec![
-            ("member-a".to_string(), Some("cosmic".to_string())),
-            ("member-b".to_string(), Some("cosmic".to_string())),
+            ("member-a".to_string(), Some("test-org/cosmic".to_string())),
+            ("member-b".to_string(), Some("test-org/cosmic".to_string())),
             ("pushed-out".to_string(), None),
         ]
     );

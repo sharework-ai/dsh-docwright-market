@@ -43,6 +43,7 @@ pub(crate) struct SuiteMeta {
     pub version: String,
     pub description: Value,
     pub title: Value,
+    pub org: Option<String>,
     pub tags: Vec<String>,
     pub members: Vec<String>,
 }
@@ -115,6 +116,7 @@ impl SuiteMeta {
                 "zh": description.get("zh").and_then(Value::as_str).unwrap_or(""),
             }),
             title,
+            org: None,
             tags,
             members: names,
         })
@@ -126,6 +128,7 @@ impl SuiteMeta {
             "version": self.version,
             "description": self.description,
             "title": self.title,
+            "org": self.org,
             "tags": self.tags,
             "members": self.members,
         })
@@ -217,6 +220,7 @@ struct SuiteRow {
     version: String,
     description: Value,
     title: Option<Value>,
+    org: Option<String>,
     tags: Vec<String>,
     author: String,
     author_id: Uuid,
@@ -226,7 +230,7 @@ struct SuiteRow {
     updated: DateTime<Utc>,
 }
 
-const SUITE_COLUMNS: &str = "name, version, description, title, tags, author, author_id, \
+const SUITE_COLUMNS: &str = "name, version, description, title, org, tags, author, author_id, \
      members, enabled, added, updated";
 
 fn suite_json(r: &SuiteRow) -> Value {
@@ -235,6 +239,7 @@ fn suite_json(r: &SuiteRow) -> Value {
         "version": r.version,
         "description": r.description,
         "title": r.title,
+        "org": r.org,
         "tags": r.tags,
         "author": r.author,
         "members": r.members,
