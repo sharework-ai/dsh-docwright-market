@@ -280,16 +280,20 @@ pub async fn create_suite(
     let (user, _org) = require_org(&state, &headers).await?;
     let meta = SuiteMeta::parse(&body)?;
 
-    let exists: Option<(String,)> =
-        sqlx::query_as("select name from suites where name = $1")
+    // Re-submitting an OWN suite is the update lane (queued review; the
+    // approve upsert overwrites). Someone else's suite stays a conflict.
+    let exists: Option<(String, Uuid)> =
+        sqlx::query_as("select name, author_id from suites where name = $1")
             .bind(&meta.name)
             .fetch_optional(&state.db)
             .await?;
-    if exists.is_some() {
-        return Err(AppError::conflict(format!(
-            "a suite named {} already exists",
-            meta.name
-        )));
+    if let Some((_, owner)) = exists {
+        if owner != user.id {
+            return Err(AppError::conflict(format!(
+                "a suite named {} already exists (owned by another publisher)",
+                meta.name
+            )));
+        }
     }
     if let Some(id) = pending_suite_submission(&state.db, &meta.name).await? {
         return Err(AppError::conflict(format!(

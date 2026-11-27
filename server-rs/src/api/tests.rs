@@ -1012,6 +1012,6 @@ async fn publish_stores_manifest_title_assets_and_suite(pool: PgPool) {
         sqlx::query_as("select title, suite, assets from packs where name = 'meta-pack'")
             .fetch_one(&pool).await.unwrap();
     assert_eq!(title.as_ref().unwrap()["zh"], "元数据包");
-    assert_eq!(suite.as_deref(), Some("cosmic"));
+    assert_eq!(suite.as_deref(), Some("org/cosmic"));
     assert_eq!(assets.as_ref().unwrap()["icon"], "assets/icon.svg");
 }
