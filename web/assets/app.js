@@ -686,14 +686,9 @@ window.MB = (() => {
    * spinner face and the outcome inline. No-op when NOT framed by DSH. */
   function mountCardInstallButton(kind, name, card) {
     if (!card) return
-    if (!inDsh()) {
-      const hint = document.createElement('span')
-      hint.className = 'absolute right-3 top-3 max-w-[45%] truncate rounded-full border border-slate-200 bg-slate-50 px-3 py-0.5 text-[11px] text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500'
-      hint.title = t('installNeedsDsh')
-      hint.textContent = t('installNeedsDsh')
-      card.appendChild(hint)
-      return
-    }
+    // Outside a DSH frame there is no install lane — render nothing rather
+    // than a hint on every card (the hint lives on the detail pages).
+    if (!inDsh()) return
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.title = t('installHereBtn')
@@ -844,8 +839,28 @@ window.MB = (() => {
     return tarEntries(res.body.pipeThrough(new DecompressionStream('gzip')))
   }
 
-  /** Build and download the ZIP for a pack (its files) or a suite (one
-   * folder per member). `button` gets pending/outcome text when passed. */
+  /** Rewrite a tarball's manifest.json so the DOWNLOADED pack reflects the
+   * market's metadata contract (author/tags/license/homepage/title/suite/
+   * assets) — published tarballs predate these fields when the author's
+   * manifest does not carry them. */
+  function enrichManifestEntry(entry, meta) {
+    if (!entry || entry.path.split('/').pop() !== 'manifest.json') return entry
+    let manifest
+    try { manifest = JSON.parse(new TextDecoder().decode(entry.bytes)) } catch { return entry }
+    manifest.author ??= meta.author
+    manifest.tags ??= meta.tags
+    manifest.license ??= meta.license
+    manifest.homepage ??= meta.homepage
+    manifest.title ??= meta.title
+    manifest.suite ??= meta.suite
+    manifest.assets ??= meta.assets
+    delete manifest.category // legacy single-choice field
+    return { path: entry.path, bytes: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) }
+  }
+
+  /** Build and download the ZIP for a pack (its files) or a suite (each
+   * member's own top-level folder as published). `button` gets pending
+   * outcome text when passed. */
   async function downloadZip(kind, name, button, version) {
     const label = () => { if (button) { button.dataset.orig = button.dataset.orig || button.textContent; button.textContent = t('zipping'); button.disabled = true } }
     const done = (ok, msg) => {
@@ -859,19 +874,18 @@ window.MB = (() => {
       let entries = []
       let zipName
       if (kind === 'pack') {
-        if (version) {
-          entries = await packEntries(name, version)
-          zipName = `${name}-${version}.zip`
-        } else {
-          const { pack } = await api(`/api/packs/${encodeURIComponent(name)}`)
-          entries = await packEntries(pack.name, pack.version)
-          zipName = `${pack.name}-${pack.version}.zip`
-        }
+        const { pack } = await api(`/api/packs/${encodeURIComponent(name)}`)
+        const effective = version ?? pack.version
+        entries = (await packEntries(pack.name, effective)).map(e => enrichManifestEntry(e, pack))
+        zipName = `${pack.name}-${effective}.zip`
       } else {
         const { suite, members } = await api(`/api/suites/${encodeURIComponent(name)}`)
         for (const m of members.filter(m => !m.missing)) {
+          // The published tarball already carries the pack's own top-level
+          // folder (tar -C packDir .) — adding another prefix nested it twice.
+          const meta = await api(`/api/packs/${encodeURIComponent(m.name)}`).catch(() => ({}))
           for (const e of await packEntries(m.name, m.version)) {
-            entries.push({ path: `${m.name}/${e.path}`, bytes: e.bytes })
+            entries.push(enrichManifestEntry(e, meta.pack || {}))
           }
         }
         zipName = `${suite.name}-${suite.version}.zip`
