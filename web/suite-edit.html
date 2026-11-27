@@ -29,6 +29,8 @@
           <div id="tag-group" class="chips !my-1">
             <span class="chip cursor-pointer" data-tag="general">general</span><span class="chip cursor-pointer" data-tag="business">business</span><span class="chip active" data-tag="it">it</span><span class="chip cursor-pointer" data-tag="finance">finance</span><span class="chip cursor-pointer" data-tag="education">education</span><span class="chip cursor-pointer" data-tag="entertainment">entertainment</span><span class="chip cursor-pointer" data-tag="media">media</span><span class="chip cursor-pointer" data-tag="healthcare">healthcare</span><span class="chip cursor-pointer" data-tag="legal">legal</span><span class="chip cursor-pointer" data-tag="engineering">engineering</span><span class="chip cursor-pointer" data-tag="other">other</span>
           </div>
+        <label class="field"><span data-i18n="suiteTitleEn"></span><input id="s-title-en" placeholder="COSMIC estimation suite"></label>
+        <label class="field"><span data-i18n="suiteTitleZh"></span><input id="s-title-zh" placeholder="COSMIC 估算套件"></label>
         <label class="field"><span data-i18n="suiteDescEn"></span><input id="s-desc-en" required></label>
         <label class="field"><span data-i18n="suiteDescZh"></span><input id="s-desc-zh"></label>
 
@@ -130,6 +132,8 @@
         document.getElementById('s-name').value = suite.name
         document.getElementById('s-name').disabled = true
         document.getElementById('s-version').value = suite.version
+        document.getElementById('s-title-en').value = suite.title?.en || ''
+        document.getElementById('s-title-zh').value = suite.title?.zh || ''
         document.getElementById('s-desc-en').value = suite.description?.en || ''
         document.getElementById('s-desc-zh').value = suite.description?.zh || ''
         ;(suite.tags || []).forEach(t => chosenTags.add(t))
@@ -170,6 +174,9 @@
         description: Object.assign(
           { en: document.getElementById('s-desc-en').value.trim() },
           document.getElementById('s-desc-zh').value.trim() ? { zh: document.getElementById('s-desc-zh').value.trim() } : {}),
+        title: Object.assign(
+          { en: document.getElementById('s-title-en').value.trim() },
+          document.getElementById('s-title-zh').value.trim() ? { zh: document.getElementById('s-title-zh').value.trim() } : {}),
         tags: [...chosenTags],
         members: [...chosen],
       }

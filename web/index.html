@@ -52,7 +52,7 @@
           <h3><a href="/suite.html?name=${encodeURIComponent(s.name)}">${MB.esc(s.org || s.author ? (s.org || s.author) + '/' : '')}${MB.esc(s.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(s.version)}</span>
             <span class="chip suite-chip" title="${MB.esc((s.members || []).join(', '))}">${MB.t('kindSuite')}</span></h3>
-          <div class="desc">${MB.esc(MB.localizedDesc(s.description))}</div>
+          <div class="desc">${MB.esc(MB.displayTitle(s) !== s.name ? MB.displayTitle(s) + ' — ' : '')}${MB.esc(MB.localizedDesc(s.description))}</div>
           <div class="meta">
             ${(s.tags || []).map(t => `<span class="chip">${MB.esc(MB.t('cat_' + t))}</span>`).join('')}
             ${(s.members || []).slice(0, 5).map(m => `<span class="chip">${MB.esc(m)}</span>`).join('')}
@@ -63,7 +63,7 @@
         <div class="card relative cursor-pointer" data-href="/pack.html?name=${encodeURIComponent(p.name)}">
           <h3><a href="/pack.html?name=${encodeURIComponent(p.name)}">${MB.esc(p.org ? p.org + '/' : '')}${MB.esc(p.name)}</a>
             <span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(p.version)}</span></h3>
-          <div class="desc">${MB.esc(MB.localizedDesc(p.description))}</div>
+          <div class="desc">${MB.esc(MB.displayTitle(p) !== p.name ? MB.displayTitle(p) + ' — ' : '')}${MB.esc(MB.localizedDesc(p.description))}</div>
           <div class="meta">
             ${(p.tags || []).map(t => `<span class="chip">${MB.esc(MB.t('cat_' + t))}</span>`).join('')}
             <span class="chip">${MB.esc(p.author)}</span>

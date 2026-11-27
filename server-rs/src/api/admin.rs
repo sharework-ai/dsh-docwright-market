@@ -269,14 +269,14 @@ pub(crate) async fn upsert_published_pack(
 ) -> Result<(), AppError> {
     let mut tx = db.begin().await?;
     sqlx::query(
-        "insert into packs (name, version, description, tags, author, author_id, license, \
+        "insert into packs (name, version, description, title, tags, author, author_id, license, \
          homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
-         content_hash, tarball_path, tarball_sha256, org) \
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) \
+         content_hash, tarball_path, tarball_sha256, org, suite, assets) \
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) \
          on conflict (name) do update set \
            version = excluded.version, \
            description = excluded.description, \
-           tags = excluded.tags, \
+           title = excluded.title, tags = excluded.tags, \
            author = excluded.author, \
            author_id = excluded.author_id, \
            license = excluded.license, \
@@ -295,6 +295,7 @@ pub(crate) async fn upsert_published_pack(
     .bind(&sub.pack_name)
     .bind(&sub.version)
     .bind(manifest.get("description").cloned().unwrap_or(Value::Null))
+    .bind(manifest.get("title").cloned().unwrap_or(Value::Null))
     .bind(sub.tags.clone().unwrap_or_else(|| vec!["other".into()]))
     .bind(sub.author.clone().unwrap_or_else(|| sub.pack_name.clone()))
     .bind(sub.uploader) // pack ownership belongs to the submitting account
@@ -309,6 +310,8 @@ pub(crate) async fn upsert_published_pack(
     .bind(tarball_path)
     .bind(tarball_sha256)
     .bind(org)
+    .bind(manifest.get("suite").and_then(Value::as_str))
+    .bind(manifest.get("assets").cloned())
     .execute(&mut *tx)
     .await?;
     // History row for this exact version. `on conflict do nothing` keeps an
@@ -366,8 +369,8 @@ pub(crate) async fn publish_suite(db: &sqlx::PgPool, sub: &SubmissionRow) -> Res
         .and_then(|(a,)| a)
         .unwrap_or_else(|| sub.pack_name.clone());
     sqlx::query(
-        "insert into suites (name, version, description, tags, author, author_id, members) \
-         values ($1, $2, $3, $4, $5, $6, $7) \
+        "insert into suites (name, version, description, title, tags, author, author_id, members) \
+         values ($1, $2, $3, $4, $5, $6, $7, $8) \
          on conflict (name) do update set \
            version = excluded.version, \
            description = excluded.description, \
@@ -380,6 +383,7 @@ pub(crate) async fn publish_suite(db: &sqlx::PgPool, sub: &SubmissionRow) -> Res
     .bind(&sub.pack_name)
     .bind(&sub.version)
     .bind(meta.get("description").cloned().unwrap_or(json!({ "en": "" })))
+    .bind(meta.get("title").cloned().unwrap_or(Value::Null))
     .bind(
         meta.get("tags")
             .and_then(Value::as_array)
@@ -391,6 +395,26 @@ pub(crate) async fn publish_suite(db: &sqlx::PgPool, sub: &SubmissionRow) -> Res
     .bind(meta.get("members").cloned().unwrap_or(json!([])))
     .execute(db)
     .await?;
+    // Suite membership is DECLARED on the pack (packs.suite, and the
+    // manifest's `suite` field): publishing a suite stamps every member and
+    // clears packs that previously pointed at this suite but are no longer
+    // members. Names are globally unique, so the suite code is the key.
+    let suite_code = sub.pack_name.as_str();
+    let members: Vec<String> = meta
+        .get("members")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(String::from).collect())
+        .unwrap_or_default();
+    sqlx::query("update packs set suite = $1 where name = any($2)")
+        .bind(suite_code)
+        .bind(&members)
+        .execute(db)
+        .await?;
+    sqlx::query("update packs set suite = null where suite = $1 and not (name = any($2))")
+        .bind(suite_code)
+        .bind(&members)
+        .execute(db)
+        .await?;
     Ok(())
 }
 

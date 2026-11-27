@@ -38,6 +38,24 @@ kubectl -n dsh get secret shrwk-tls -o json \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); d["metadata"]["namespace"]="market"; d["metadata"].pop("creationTimestamp",None); d["metadata"].pop("resourceVersion",None); d["metadata"].pop("uid",None); print(json.dumps(d))' \
   | kubectl apply -f -
 
+# ---- migrations FIRST (a new image whose columns are missing answers 500
+# until the DDL lands — this bit us twice: run DDL before the rollout) ----
+PG_PW="$(get_secret supabase-postgres-auth password)"
+db_psql() {
+  kubectl -n supabase exec -i supabase-postgres-0 -- env PGPASSWORD="$PG_PW" \
+    psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"
+}
+echo "== applying pending migrations -> public"
+db_psql -qc 'create table if not exists public.schema_migrations (name text primary key, applied_at timestamptz not null default now())' >/dev/null
+for f in "$M"/supabase/migrations/*.sql; do
+  base="$(basename "$f")"
+  [ "$base" = "0000_auth_stub.sql" ] && continue
+  [ "$(db_psql -tAc "select 1 from public.schema_migrations where name = '$base'")" = "1" ] && continue
+  echo "== migrating $base -> public"
+  db_psql -qf - < "$f"
+  db_psql -qc "insert into public.schema_migrations (name) values ('$base')"
+done
+
 sed -e "s/__TAG__/$TAG/g" -e "s/__VTAG__/${VTAG:-$TAG}/g" "$M/deploy/k8s.yaml" | kubectl apply -f -
 
 echo "waiting for rollouts..."

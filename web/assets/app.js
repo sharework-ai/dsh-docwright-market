@@ -155,6 +155,8 @@ window.MB = (() => {
       searchBtn: 'Search',
       installNeedsDsh: 'Browse in DeepSeek Harness to install',
       downloadZip: 'Download ZIP',
+      suiteBadge: 'Suite',
+      assetsTitle: 'Gallery',
       zipping: 'Zipping…',
       zipFail: 'ZIP failed',
       suiteCreate: 'New suite',
@@ -174,6 +176,8 @@ window.MB = (() => {
       cat_other: 'Other',
       standaloneHint: 'Standalone packs only — packs that belong to a suite are managed on their suite.',
       suiteMaint: 'Suite maintenance',
+      suiteTitleEn: 'Title (EN)',
+      suiteTitleZh: 'Title (中文, optional)',
       suiteMaintIntro: 'A suite is a named group of published packs. Pick members, edit metadata, submit for review.',
       suiteMembersPick: 'Member packs',
       suitePickHint: 'Type to filter, click a row to add or remove.',
@@ -344,6 +348,8 @@ window.MB = (() => {
       searchBtn: '搜索',
       installNeedsDsh: '请在 DeepSeek Harness 中浏览并安装',
       downloadZip: '下载 ZIP',
+      suiteBadge: '套件成员',
+      assetsTitle: '图集',
       zipping: '打包中…',
       zipFail: '打包失败',
       suiteCreate: '新建套件',
@@ -363,6 +369,8 @@ window.MB = (() => {
       cat_other: '其他',
       standaloneHint: '仅列独立的 pack——属于套件的 pack 请在对应套件下管理。',
       suiteMaint: '套件维护',
+      suiteTitleEn: '标题（英文）',
+      suiteTitleZh: '标题（中文，可选）',
       suiteMaintIntro: '套件是一组已发布 pack 的命名集合。选择成员、编辑元数据，提交进审核队列。',
       suiteMembersPick: '成员 pack',
       suitePickHint: '输入过滤，点击一行添加或移除。',
@@ -562,6 +570,14 @@ window.MB = (() => {
     document.getElementById('nav-packs')?.classList.remove('hidden')
     const acc = await api('/api/account', { auth: true }).catch(() => null)
     if (acc?.isAdmin) document.getElementById('nav-admin')?.classList.remove('hidden')
+  }
+
+  /** Display title: the localized `title` when present, else the code name. */
+  function displayTitle(item) {
+    const t = item?.title
+    if (t && typeof t === 'object') return t[lang()] || t.en || t.zh || item?.name || ''
+    if (typeof t === 'string' && t) return t
+    return item?.name || ''
   }
 
   function localizedDesc(description) {
@@ -873,5 +889,5 @@ window.MB = (() => {
     }
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, get supabase() { return supabase } }
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, displayTitle, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, get supabase() { return supabase } }
 })()

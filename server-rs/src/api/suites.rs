@@ -42,6 +42,7 @@ pub(crate) struct SuiteMeta {
     pub name: String,
     pub version: String,
     pub description: Value,
+    pub title: Value,
     pub tags: Vec<String>,
     pub members: Vec<String>,
 }
@@ -68,6 +69,7 @@ impl SuiteMeta {
             .filter(|v| !v.is_empty())
             .ok_or_else(|| AppError::bad_request("missing required field: version"))?;
         let description = body.get("description").cloned().unwrap_or(Value::Null);
+        let title = body.get("title").cloned().unwrap_or(Value::Null);
         let en = description.get("en").and_then(Value::as_str).unwrap_or_default().trim();
         if en.is_empty() {
             return Err(AppError::bad_request("description.en must be a non-empty string"));
@@ -112,6 +114,7 @@ impl SuiteMeta {
                 "en": en,
                 "zh": description.get("zh").and_then(Value::as_str).unwrap_or(""),
             }),
+            title,
             tags,
             members: names,
         })
@@ -122,6 +125,7 @@ impl SuiteMeta {
             "name": self.name,
             "version": self.version,
             "description": self.description,
+            "title": self.title,
             "tags": self.tags,
             "members": self.members,
         })
@@ -212,6 +216,7 @@ struct SuiteRow {
     name: String,
     version: String,
     description: Value,
+    title: Option<Value>,
     tags: Vec<String>,
     author: String,
     author_id: Uuid,
@@ -221,7 +226,7 @@ struct SuiteRow {
     updated: DateTime<Utc>,
 }
 
-const SUITE_COLUMNS: &str = "name, version, description, tags, author, author_id, \
+const SUITE_COLUMNS: &str = "name, version, description, title, tags, author, author_id, \
      members, enabled, added, updated";
 
 fn suite_json(r: &SuiteRow) -> Value {
@@ -229,6 +234,7 @@ fn suite_json(r: &SuiteRow) -> Value {
         "name": r.name,
         "version": r.version,
         "description": r.description,
+        "title": r.title,
         "tags": r.tags,
         "author": r.author,
         "members": r.members,

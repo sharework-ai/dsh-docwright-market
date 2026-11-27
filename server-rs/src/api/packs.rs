@@ -24,6 +24,9 @@ pub struct PackRow {
     pub version: String,
     pub description: Value,
     pub tags: Vec<String>,
+    pub title: Option<Value>,
+    pub suite: Option<String>,
+    pub assets: Option<Value>,
     pub author: String,
     pub author_id: uuid::Uuid,
     pub license: String,
@@ -42,7 +45,7 @@ pub struct PackRow {
     pub updated: DateTime<Utc>,
 }
 
-const PACK_COLUMNS: &str = "name, version, description, tags, author, author_id, license, \
+const PACK_COLUMNS: &str = "name, version, description, title, tags, suite, assets, author, author_id, license, \
      homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
      content_hash, tarball_path, tarball_sha256, org, status, added, updated";
 
@@ -200,7 +203,13 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Ap
             "name": r.name,
             "version": r.version,
             "description": r.description,
-            "tags": r.tags,
+            "title": r.title,
+            "title": r.title,
+        "tags": r.tags,
+        "suite": r.suite,
+        "assets": r.assets,
+            "suite": r.suite,
+            "assets": r.assets,
             "author": r.author,
             "org": r.org,
             "license": r.license,

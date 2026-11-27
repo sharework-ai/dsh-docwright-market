@@ -23,7 +23,7 @@
         return
       }
       const desc = MB.esc(MB.localizedDesc(pack.description))
-      document.title = `${pack.name} — docwright pack market`
+      document.title = `${MB.displayTitle(pack)} — dsh-docwright market`
       const versionRows = (versions || []).map(v => `
         <tr>
           <td class="font-mono">${MB.esc(v.version)}</td>
@@ -33,9 +33,11 @@
         </tr>`).join('')
       document.getElementById('main').innerHTML = `
         <p><a class="chip" href="/">← ${MB.t('browse')}</a></p>
-        <h1>${MB.esc(pack.name)}
-          <span class="font-mono text-2xl font-semibold text-primary dark:text-accent-strong">@${MB.esc(pack.version)}</span>
-          ${pack.org ? `<span class="chip align-middle">org: ${MB.esc(pack.org)}</span>` : ''}</h1>
+        <h1>${MB.esc(MB.displayTitle(pack))}
+          <span class="font-mono text-2xl font-semibold text-primary dark:text-accent-strong align-middle">${MB.esc(pack.org ? pack.org + '/' : '')}${MB.esc(pack.name)}@${MB.esc(pack.version)}</span>
+          ${pack.org ? `<span class="chip align-middle">org: ${MB.esc(pack.org)}</span>` : ''}
+          ${pack.suite ? `<a class="chip align-middle" href="/suite.html?name=${encodeURIComponent(pack.suite)}" title="${MB.esc(MB.t('suiteBadge'))}">${MB.esc(MB.t('suiteBadge'))}: ${MB.esc(pack.suite)}</a>` : ''}</h1>
+        <div id="assets-gallery" class="hidden mb-4 flex flex-wrap gap-3"></div>
         <p class="max-w-xl text-slate-500 dark:text-slate-400">${desc}</p>
         ${suiteLinks ? `<div class="meta"><span class="muted text-sm">${MB.t('belongsTo')}:</span> ${suiteLinks}</div>` : ''}
         ${pack.hasFunctionRules ? `<div class="notice bad max-w-xl">${MB.esc(MB.t('functionsWarn'))}</div>` : ''}
@@ -83,6 +85,31 @@
       document.querySelectorAll('[data-zip-version]').forEach(a => {
         a.addEventListener('click', e => { e.preventDefault(); MB.downloadZip('pack', pack.name, a) })
       })
+      // Presentational assets (icon + images) live inside the published
+      // tarball under assets/ — extracted client-side from the same public
+      // tgz the download uses; the server stays zero-dependency.
+      if (pack.assets && (pack.assets.icon || (pack.assets.images || []).length)) {
+        MB.api(`/api/packs/${encodeURIComponent(pack.name)}`)
+          .then(async ({ pack: full }) => {
+            const res = await fetch(full.tarball)
+            if (!res.ok) return
+            const entries = await MB.tarEntries(await res.body.pipeThrough(new DecompressionStream('gzip')))
+            const wanted = [pack.assets.icon, ...(pack.assets.images || [])].filter(Boolean)
+            const gallery = document.getElementById('assets-gallery')
+            for (const path of wanted) {
+              const entry = entries.find(e => e.path === path || e.path.endsWith('/' + path) || path.endsWith(e.path))
+              if (!entry) continue
+              const blob = new Blob([entry.bytes])
+              const url = URL.createObjectURL(blob)
+              const img = document.createElement('img')
+              img.src = url
+              img.alt = path
+              img.className = 'max-h-40 rounded-lg border border-slate-200 dark:border-slate-800'
+              gallery.appendChild(img)
+            }
+            if (gallery.childElementCount > 0) gallery.classList.remove('hidden')
+          }).catch(() => {})
+      }
       MB.header('browse')
       MB.mountInstallButton('pack', pack.name, document.getElementById('install-bridge'))
     }

@@ -913,3 +913,104 @@ async fn disabled_suites_vanish_from_the_read_helpers(pool: PgPool) {
     assert_eq!(map.get("member-a").unwrap(), &vec!["live-suite".to_string()]);
     assert!(!map.contains_key("member-b"), "disabled suites contribute no membership");
 }
+
+/// The suite flag lives on the pack (packs.suite): publishing a suite stamps
+/// every member and clears packs that pointed at this suite but are no longer
+/// members. Manifest metadata (title/assets/suite) reaches the catalog row
+/// through the normal publish path.
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn suite_publish_stamps_and_clears_the_pack_flag(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    seed_user(&pool, author).await;
+    seed_pack(&pool, "member-a", "0.1.0", author, "sha256:a").await;
+    seed_pack(&pool, "member-b", "0.1.0", author, "sha256:b").await;
+    seed_pack(&pool, "pushed-out", "0.1.0", author, "sha256:c").await;
+
+    // v1 of the suite includes pushed-out, so the flag lands on all three.
+    let v1 = json!({
+        "name": "cosmic",
+        "version": "1.0.0",
+        "description": { "en": "suite", "zh": "套件" },
+        "title": { "en": "COSMIC suite", "zh": "COSMIC 套件" },
+        "tags": ["business"],
+        "members": ["member-a", "member-b", "pushed-out"],
+    });
+    let sub1 = suite_submission_row(&pool, "cosmic", "1.0.0", author, v1).await;
+    publish_suite(&pool, &sub1).await.expect("publish v1");
+    let flagged: Vec<(String, Option<String>)> =
+        sqlx::query_as("select name, suite from packs order by name").fetch_all(&pool).await.unwrap();
+    assert_eq!(
+        flagged,
+        vec![
+            ("member-a".to_string(), Some("cosmic".to_string())),
+            ("member-b".to_string(), Some("cosmic".to_string())),
+            ("pushed-out".to_string(), Some("cosmic".to_string())),
+        ]
+    );
+    let (title,): (Value,) = sqlx::query_as("select title from suites where name = 'cosmic'")
+        .fetch_one(&pool).await.unwrap();
+    assert_eq!(title["en"], "COSMIC suite");
+
+    // v2 drops pushed-out: its flag is cleared, the remaining two stay.
+    let v2 = json!({
+        "name": "cosmic",
+        "version": "2.0.0",
+        "description": { "en": "suite", "zh": "套件" },
+        "tags": ["business"],
+        "members": ["member-a", "member-b"],
+    });
+    let sub2 = suite_submission_row(&pool, "cosmic", "2.0.0", author, v2).await;
+    publish_suite(&pool, &sub2).await.expect("publish v2");
+    let flagged: Vec<(String, Option<String>)> =
+        sqlx::query_as("select name, suite from packs order by name").fetch_all(&pool).await.unwrap();
+    assert_eq!(
+        flagged,
+        vec![
+            ("member-a".to_string(), Some("cosmic".to_string())),
+            ("member-b".to_string(), Some("cosmic".to_string())),
+            ("pushed-out".to_string(), None),
+        ]
+    );
+}
+
+/// Manifest metadata carried by a pack (title / assets / declared suite)
+/// lands on the catalog row at publish time.
+#[sqlx::test(migrations = "../supabase/migrations")]
+async fn publish_stores_manifest_title_assets_and_suite(pool: PgPool) {
+    init_log();
+    let author = Uuid::new_v4();
+    seed_user(&pool, author).await;
+    let sub = SubmissionRow {
+        id: Uuid::new_v4(),
+        pack_name: "meta-pack".into(),
+        version: "0.1.0".into(),
+        uploader: author,
+        archive_path: Some("archive.tgz".into()),
+        report: json!({}),
+        tags: Some(vec!["it".into()]),
+        author: Some("org".into()),
+        license: Some("MIT".into()),
+        homepage: None,
+        kind: "pack".into(),
+        suite_meta: None,
+    };
+    let manifest = json!({
+        "name": "meta-pack",
+        "version": "0.1.0",
+        "description": { "en": "d", "zh": "d" },
+        "title": { "en": "Meta pack", "zh": "元数据包" },
+        "suite": "cosmic",
+        "assets": { "icon": "assets/icon.svg", "images": ["assets/a.png"] },
+        "consumes": [], "languages": ["zh-CN"],
+    });
+    upsert_published_pack(&pool, &sub, &manifest, "sha256:h", false, "tarballs/p.tgz", "sha256:t", "org")
+        .await
+        .expect("publish");
+    let (title, suite, assets): (Option<Value>, Option<String>, Option<Value>) =
+        sqlx::query_as("select title, suite, assets from packs where name = 'meta-pack'")
+            .fetch_one(&pool).await.unwrap();
+    assert_eq!(title.as_ref().unwrap()["zh"], "元数据包");
+    assert_eq!(suite.as_deref(), Some("cosmic"));
+    assert_eq!(assets.as_ref().unwrap()["icon"], "assets/icon.svg");
+}

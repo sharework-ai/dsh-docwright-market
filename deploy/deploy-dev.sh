@@ -40,15 +40,24 @@ ALTER ROLE market_dev SET search_path = market_dev;
 SQL
 # Migrations run as postgres with search_path pinned to the dev schema
 # (0000_auth_stub is plain-Postgres-only and fails loud on real supabase —
-# skip it, auth is the shared GoTrue).
-for f in 0001_init.sql 0002_org_versions.sql 0003_suites.sql 0004_categories.sql 0005_category_renames.sql 0006_tags.sql; do
-  echo "== migrating $f -> market_dev"
+# skip it, auth is the shared GoTrue). A tracker table makes re-runs no-ops
+# and guarantees DDL lands BEFORE the new image rolls out.
+PG_PW="$(get_secret supabase-postgres-auth password)"
+db_mig() {
   kubectl -n supabase exec -i supabase-postgres-0 -- env \
-    PGPASSWORD="$(get_secret supabase-postgres-auth password)" \
-    PGOPTIONS="-c search_path=market_dev" \
-    psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-    < "$M/supabase/migrations/$f"
+    PGPASSWORD="$PG_PW" PGOPTIONS="-c search_path=market_dev" \
+    psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"
+}
+db_mig -qc 'create table if not exists market_dev.schema_migrations (name text primary key, applied_at timestamptz not null default now())' >/dev/null
+for f in "$M"/supabase/migrations/*.sql; do
+  base="$(basename "$f")"
+  [ "$base" = "0000_auth_stub.sql" ] && continue
+  [ "$(db_mig -tAc "select 1 from market_dev.schema_migrations where name = '$base'")" = "1" ] && continue
+  echo "== migrating $base -> market_dev"
+  db_mig -qf - < "$f"
+  db_mig -qc "insert into market_dev.schema_migrations (name) values ('$base')"
 done
+
 db <<'SQL'
 GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA market_dev TO market_dev;
 GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA market_dev TO market_dev;
