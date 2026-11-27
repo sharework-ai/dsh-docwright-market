@@ -155,6 +155,19 @@ window.MB = (() => {
       searchBtn: 'Search',
       installNeedsDsh: 'Browse in DeepSeek Harness to install',
       downloadZip: 'Download ZIP',
+      bundleSuite: 'Suite',
+      bundlePack: 'Pack',
+      status_new: 'new',
+      status_update: 'update',
+      status_unchanged: 'unchanged',
+      status_tooLow: 'version lower than the market — blocked',
+      status_missing: 'missing',
+      submitAll: 'Parse and update',
+      submitZipHint: 'Upload the ZIP the download buttons produce: a root manifest.json makes it a suite (members in their own folders); otherwise every top-level folder with a manifest.json is a pack. Versions must not be lower than the published ones.',
+      versionRule: 'Suite and pack versions must not be lower than the published ones.',
+      noBundle: 'No pack or suite found in this ZIP (expected manifest.json at the root or one per top-level folder).',
+      memberPacks: 'Member packs',
+      submittingItem: 'Submitting {name}…',
       suiteBadge: 'Suite',
       assetsTitle: 'Gallery',
       zipping: 'Zipping…',
@@ -348,6 +361,19 @@ window.MB = (() => {
       searchBtn: '搜索',
       installNeedsDsh: '请在 DeepSeek Harness 中浏览并安装',
       downloadZip: '下载 ZIP',
+      bundleSuite: '套件',
+      bundlePack: 'Pack',
+      status_new: '新包',
+      status_update: '更新',
+      status_unchanged: '版本相同',
+      status_tooLow: '版本低于市场已发布——阻断',
+      status_missing: '缺失',
+      submitAll: '解析并更新',
+      submitZipHint: '上传下载按钮产出的 ZIP：根目录有 manifest.json 即套件（成员在各自目录中）；否则每个含 manifest.json 的顶层目录是一个 pack。版本不得低于市场当前版本。',
+      versionRule: '套件与 pack 的版本不得低于市场当前版本。',
+      noBundle: 'ZIP 中没有找到 pack 或套件（应在根目录或每个顶层目录下有 manifest.json）。',
+      memberPacks: '成员 pack',
+      submittingItem: '正在提交 {name}…',
       suiteBadge: '套件成员',
       assetsTitle: '图集',
       zipping: '打包中…',
@@ -917,5 +943,144 @@ window.MB = (() => {
     }
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, displayTitle, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, get supabase() { return supabase } }
+  // ---- ZIP reader + tar.gz builder (the submission round-trip) -----------
+  // Submissions upload ZIPs in exactly the format the download buttons
+  // produce: a root manifest.json for a suite (members in their own folders)
+  // or one folder per pack. The reader walks the central directory and
+  // inflates DEFLATE entries via DecompressionStream('deflate-raw'); STORE
+  // entries pass through. Pack submissions still land as .tgz on the server,
+  // so a reader-side pack is re-tarred and gzipped here.
+
+  async function zipEntries(file) {
+    const buf = new Uint8Array(await file.arrayBuffer())
+    const dv = new DataView(buf.buffer)
+    let eocd = -1
+    for (let i = buf.length - 22; i >= 0 && i > buf.length - 22 - 65536; i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break }
+    }
+    if (eocd < 0) throw new Error('not a zip file')
+    const count = dv.getUint16(eocd + 10, true)
+    let off = dv.getUint32(eocd + 16, true)
+    const dec = new TextDecoder()
+    const entries = []
+    for (let i = 0; i < count; i++) {
+      if (dv.getUint32(off, true) !== 0x02014b50) throw new Error('corrupt zip central directory')
+      const method = dv.getUint16(off + 10, true)
+      const size = dv.getUint32(off + 24, true)
+      const nameLen = dv.getUint16(off + 28, true)
+      const extraLen = dv.getUint16(off + 30, true)
+      const commentLen = dv.getUint16(off + 32, true)
+      const localOff = dv.getUint32(off + 42, true)
+      const name = dec.decode(buf.subarray(off + 46, off + 46 + nameLen))
+      const lNameLen = dv.getUint16(localOff + 26, true)
+      const lExtraLen = dv.getUint16(localOff + 28, true)
+      const dataStart = localOff + 30 + lNameLen + lExtraLen
+      let data = buf.subarray(dataStart, dataStart + size)
+      if (method === 8) {
+        const reader = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader()
+        const chunks = []
+        let total = 0
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          total += value.length
+        }
+        const out = new Uint8Array(total)
+        let o = 0
+        for (const c of chunks) { out.set(c, o); o += c.length }
+        data = out
+      } else if (method !== 0) {
+        throw new Error(`unsupported zip compression method ${method}`)
+      }
+      if (!name.endsWith('/')) entries.push({ path: name.replace(/^\.\//, ''), bytes: data.slice() })
+      off += 46 + nameLen + extraLen + commentLen
+    }
+    return entries
+  }
+
+  /** Numeric x.y.z compare: negative when a < b. */
+  function versionCompare(a, b) {
+    const pa = String(a).split('.')
+    const pb = String(b).split('.')
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = parseInt(pa[i] ?? '0', 10) || 0
+      const nb = parseInt(pb[i] ?? '0', 10) || 0
+      if (na !== nb) return na - nb
+    }
+    return 0
+  }
+
+  /** Classify a ZIP's entries: a root manifest.json with `members` is a
+   * suite bundle; otherwise every top-level folder with its own
+   * manifest.json is a pack bundle. */
+  function detectBundle(entries) {
+    const root = entries.find(e => e.path === 'manifest.json')
+    if (root) {
+      const manifest = JSON.parse(new TextDecoder().decode(root.bytes))
+      if (Array.isArray(manifest.members)) {
+        return { kind: 'suite', manifest, entries }
+      }
+    }
+    const dirs = new Map()
+    for (const e of entries) {
+      const top = e.path.includes('/') ? e.path.split('/')[0] : ''
+      if (!top) continue
+      if (!dirs.has(top)) dirs.set(top, [])
+      dirs.get(top).push(e)
+    }
+    const packs = []
+    for (const [dir, files] of dirs) {
+      const manifestEntry = files.find(e => e.path === `${dir}/manifest.json`)
+      if (!manifestEntry) continue
+      packs.push({ dir, files, manifest: JSON.parse(new TextDecoder().decode(manifestEntry.bytes)) })
+    }
+    if (packs.length > 0) return { kind: 'packs', packs, entries }
+    if (root) return { kind: 'pack', manifest: JSON.parse(new TextDecoder().decode(root.bytes)), entries }
+    return null
+  }
+
+  /** Entries → ustar → gzip Blob (the server's submission archive shape). */
+  async function makeTarGz(entries) {
+    const enc = new TextEncoder()
+    const parts = []
+    for (const e of entries) {
+      let name = e.path.replace(/^\.\//, '')
+      const content = e.bytes
+      const header = new Uint8Array(512)
+      let nameField = name
+      let prefixField = ''
+      if (name.length > 100) {
+        const slash = name.lastIndexOf('/', 99)
+        if (slash < 0) throw new Error(`tar path too long: ${name}`)
+        prefixField = name.slice(0, slash)
+        nameField = name.slice(slash + 1)
+      }
+      header.set(enc.encode(nameField), 0)
+      header.set(enc.encode(prefixField), 345)
+      header.set(enc.encode('000644 \0'), 100) // mode
+      header.set(enc.encode(String(content.length.toString(8)).padStart(11, '0') + ' '), 124)
+      // checksum: spaces placeholder, then octal over the raw header
+      header.set(enc.encode('        '), 148)
+      let sum = 0
+      for (const b of header) sum += b
+      header.set(enc.encode(sum.toString(8).padStart(6, '0') + '\0 '), 148)
+      const pad = (512 - content.length % 512) % 512
+      const body = new Uint8Array(content.length + pad)
+      body.set(content)
+      parts.push(header, body)
+    }
+    parts.push(new Uint8Array(1024))
+    const tar = new Blob(parts)
+    return new Response(tar.stream().pipeThrough(new CompressionStream('gzip'))).blob()
+  }
+
+  /** Submit-side status of one code@version against the published catalog. */
+  async function versionStatus(code, version) {
+    const current = await api(`/api/packs/${encodeURIComponent(code)}`).then(p => p.pack?.version).catch(() => null)
+    const cmp = current === null || current === undefined ? null : versionCompare(version, current)
+    return { current, state: cmp === null ? 'new' : cmp > 0 ? 'update' : cmp === 0 ? 'unchanged' : 'tooLow' }
+  }
+
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, displayTitle, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, zipEntries, makeTarGz, detectBundle, versionCompare, versionStatus, get supabase() { return supabase } }
 })()

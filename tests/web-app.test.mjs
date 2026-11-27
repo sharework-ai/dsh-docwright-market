@@ -292,3 +292,54 @@ describe('ZIP download (tarEntries + makeZip)', () => {
     expect(dv.getUint32(buf.length - 22 + 16, true)).toBe(cdOffset)
   })
 })
+
+describe('submission round-trip (zip in, tar.gz out)', () => {
+  const enc = new TextEncoder()
+
+  it('reads back a STORE zip written by makeZip', async () => {
+    const { MB } = loadAppBrowser()
+    const blob = MB.makeZip([
+      { path: 'demo/manifest.json', bytes: enc.encode('{"name":"demo"}') },
+      { path: 'demo/rules/a.json', bytes: enc.encode('[]') },
+    ])
+    const file = new File([blob], 'demo.zip')
+    const entries = await MB.zipEntries(file)
+    expect(entries.map(e => e.path).sort()).toEqual(['demo/manifest.json', 'demo/rules/a.json'])
+    expect(new TextDecoder().decode(entries.find(e => e.path === 'demo/rules/a.json').bytes)).toBe('[]')
+  })
+
+  it('detectBundle: root manifest with members is a suite, folders are packs', () => {
+    const { MB } = loadAppBrowser()
+    const mk = (path, text) => ({ path, bytes: enc.encode(text) })
+    const suite = MB.detectBundle([
+      mk('manifest.json', '{"name":"cosmic","members":["a","b"]}'),
+      mk('a/manifest.json', '{"name":"a"}'),
+      mk('a/rules.json', '[]'),
+      mk('b/manifest.json', '{"name":"b"}'),
+    ])
+    expect(suite.kind).toBe('suite')
+    expect(suite.manifest.members).toEqual(['a', 'b'])
+    const packs = MB.detectBundle([mk('x/manifest.json', '{"name":"x"}'), mk('x/a.json', '1'), mk('y/manifest.json', '{"name":"y"}')])
+    expect(packs.kind).toBe('packs')
+    expect(packs.packs.map(p => p.manifest.name)).toEqual(['x', 'y'])
+    expect(MB.detectBundle([mk('random.txt', 'x')])).toBeNull()
+  })
+
+  it('versionCompare is numeric per segment', () => {
+    const { MB } = loadAppBrowser()
+    expect(MB.versionCompare('0.2.0', '0.10.0')).toBeLessThan(0)
+    expect(MB.versionCompare('1.0.0', '1.0.0')).toBe(0)
+    expect(MB.versionCompare('2.0.0', '1.9.9')).toBeGreaterThan(0)
+  })
+
+  it('makeTarGz produces a tar the reader parses back (checksum valid)', async () => {
+    const { MB } = loadAppBrowser()
+    const blob = await MB.makeTarGz([
+      { path: 'manifest.json', bytes: enc.encode('{"name":"rt"}') },
+      { path: 'rules/zh-CN.json', bytes: enc.encode('[1,2]') },
+    ])
+    const entries = await MB.tarEntries(await blob.stream().pipeThrough(new DecompressionStream('gzip')))
+    expect(entries.map(e => e.path).sort()).toEqual(['manifest.json', 'rules/zh-CN.json'])
+    expect(new TextDecoder().decode(entries.find(e => e.path === 'manifest.json').bytes)).toBe('{"name":"rt"}')
+  })
+})

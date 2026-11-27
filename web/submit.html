@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Submit — docwright pack market</title>
+  <title>Submit — dsh-docwright market</title>
   <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
   <main>
     <p><a class="chip" href="/packs.html" data-i18n="backPacks"></a></p>
     <h1 data-i18n="submitTitle"></h1>
-    <p class="muted" data-i18n="submitHint"></p>
+    <p class="muted max-w-xl text-[13.5px]" data-i18n-html="submitZipHint"></p>
 
     <div id="auth-box" class="card">
       <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
@@ -25,39 +25,16 @@
       <div id="org-gate" class="notice info hidden">
         <span data-i18n="orgGate"></span> <a href="/account.html" data-i18n="account"></a>
       </div>
-      <div class="tabs">
-        <button id="tab-pack" class="active" type="button" data-i18n="tabPack"></button>
-        <button id="tab-suite" type="button" data-i18n="tabSuite" title="${''}"></button>
-      </div>
-      <form id="submit-form">
-        <section class="block !my-4">
-          <h2 class="text-base font-semibold" data-i18n="step1Archive"></h2>
-          <label class="field !mt-2"><span data-i18n="archive"></span><input id="archive" type="file" accept=".tgz,.tar.gz,application/gzip" required></label>
-          <div id="recognized" class="notice info hidden"></div>
-        </section>
-        <section id="meta-step" class="block !my-4 hidden">
-          <h2 class="text-base font-semibold" data-i18n="confirmStep"></h2>
-          <p class="muted text-[13px]" id="locked-note" data-i18n="lockedFromArchive"></p>
-          <label class="field"><span data-i18n="author"></span><input id="author" required></label>
-          <label class="field"><span data-i18n="category"></span>
-            <div id="tag-group" class="chips !my-1">
-                            <span class="chip cursor-pointer" data-tag="general">general</span><span class="chip cursor-pointer" data-tag="business">business</span><span class="chip active" data-tag="it">it</span><span class="chip cursor-pointer" data-tag="finance">finance</span><span class="chip cursor-pointer" data-tag="education">education</span><span class="chip cursor-pointer" data-tag="entertainment">entertainment</span><span class="chip cursor-pointer" data-tag="media">media</span><span class="chip cursor-pointer" data-tag="healthcare">healthcare</span><span class="chip cursor-pointer" data-tag="legal">legal</span><span class="chip cursor-pointer" data-tag="engineering">engineering</span><span class="chip cursor-pointer" data-tag="other">other</span>
-            </div>
-            <input type="hidden" id="category" value="software">
-          </label>
-          <label class="field"><span data-i18n="license"></span>
-            <select id="license">
-              <option value="MIT" selected>MIT</option>
-              <option value="Apache-2.0">Apache-2.0</option>
-              <option value="BSD-3-Clause">BSD-3-Clause</option>
-              <option value="BSD-2-Clause">BSD-2-Clause</option>
-              <option value="ISC">ISC</option>
-            </select>
-          </label>
-          <label class="field"><span data-i18n="homepage"></span><input id="homepage" type="url" placeholder="https://…"></label>
-          <button class="primary" type="submit" id="btn-send" data-i18n="send"></button>
-        </section>
-      </form>
+
+      <!-- step 1: the zip IS the submission; kind is auto-detected -->
+      <section class="block !my-4">
+        <h2 class="text-base font-semibold" data-i18n="step1Archive"></h2>
+        <label class="field !mt-2"><span data-i18n="archive"></span><input id="archive" type="file" accept=".zip,application/zip" required></label>
+        <p class="muted text-[13px]" data-i18n="submitZipHint"></p>
+        <div id="recognized" class="notice info hidden"></div>
+      </section>
+
+      <div id="bundle" class="hidden"></div>
       <div id="result"></div>
     </div>
   </main>
@@ -66,150 +43,8 @@
   <script>
     MB.header('submit')
 
-    async function maybeShowForm() {
-      const s = await MB.session()
-      document.getElementById('auth-box').classList.toggle('hidden', !!s)
-      document.getElementById('form-box').classList.toggle('hidden', !s)
-      if (!s) return
-      // Submitting requires a publisher org; without one the server would
-      // 403 anyway, so gate the form up front (and prefill the author from
-      // the org while we're here).
-      const account = await MB.api('/api/account', { auth: true }).catch(() => null)
-      const gated = !account?.org
-      document.getElementById('org-gate').classList.toggle('hidden', !gated)
-      document.getElementById('submit-form').classList.toggle('hidden', gated)
-      if (account?.org && !document.getElementById('author').value) {
-        document.getElementById('author').value = account.org
-      }
-    }
-
-    // Two submission modes: PACK (upload a verified tarball) and SUITE (a
-    // form — a suite is pure metadata, there is NO archive to upload; the
-    // members must already be published packs). Both land in the SAME review
-    // queue; pack.html's 我的管理 section tracks either kind's status.
-    let mode = 'pack'
-    function setMode(next) {
-      mode = next
-      document.getElementById('tab-pack').classList.toggle('active', mode === 'pack')
-      document.getElementById('tab-suite').classList.toggle('active', mode === 'suite')
-      document.getElementById('submit-form').classList.toggle('hidden', mode !== 'pack')
-      document.getElementById('result').innerHTML = ''
-    }
-    document.getElementById('tab-pack').addEventListener('click', () => setMode('pack'))
-    // Suite submissions live on the dedicated maintenance page (metadata
-    // + member picking there); this tab simply hands off to it.
-    document.getElementById('tab-suite').addEventListener('click', () => { location.href = '/suite-edit.html' })
-
-    // Upload-first flow: as soon as an archive is chosen, read manifest.json
-    // straight out of the tgz in the browser (gzip via DecompressionStream +
-    // a minimal ustar walker) and show the recognized identity, so the user
-    // CONFIRMS metadata on top of a real archive instead of filling a form
-    // blind. The server-side machine verification stays the source of truth.
-    async function extractManifest(file) {
-      const reader = file.stream().pipeThrough(new DecompressionStream('gzip')).getReader()
-      const chunks = []
-      let total = 0
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value)
-        total += value.length
-        if (total > 64 * 1024 * 1024) break // sanity cap
-      }
-      const bytes = new Uint8Array(total)
-      let off = 0
-      for (const c of chunks) { bytes.set(c, off); off += c.length }
-      // minimal ustar walk: 512-byte headers, find the manifest.json entry
-      for (let pos = 0; pos + 512 <= bytes.length;) {
-        const header = bytes.subarray(pos, pos + 512)
-        if (header.every(b => b === 0)) break
-        let name = ''
-        for (let i = 0; i < 100 && header[i] !== 0; i++) name += String.fromCharCode(header[i])
-        const sizeField = new TextDecoder().decode(header.subarray(124, 136)).replace(/[\0 ]/g, '')
-        const size = parseInt(sizeField || '0', 8) || 0
-        const dataStart = pos + 512
-        const clean = name.replace(/^\.\//, '')
-        if (clean === 'manifest.json' || clean.endsWith('/manifest.json')) {
-          return JSON.parse(new TextDecoder().decode(bytes.subarray(dataStart, dataStart + size)))
-        }
-        pos = dataStart + Math.ceil(size / 512) * 512
-      }
-      return null
-    }
-
-    // Metadata carried by manifest.json is shown LOCKED (author, tags,
-    // license, homepage); anything the manifest omits stays editable — the
-    // market needs at least an author, so silent blanks would only 403 later.
-    function fillMetaFromManifest(manifest) {
-      const bind = (id, value, lock) => {
-        const el = document.getElementById(id)
-        el.value = value ?? ''
-        el.disabled = lock
-      }
-      bind('author', manifest?.author, manifest?.author !== undefined)
-      bind('license', manifest?.license, manifest?.license !== undefined)
-      bind('homepage', manifest?.homepage, manifest?.homepage !== undefined)
-      const tags = Array.isArray(manifest?.tags) ? manifest.tags.filter(t => TAG_VALUES.includes(t)) : null
-      setTags(tags ?? ['it'], tags !== null)
-      document.getElementById('locked-note').classList.toggle('hidden', !manifest?.author && tags === null && manifest?.license === undefined && manifest?.homepage === undefined)
-      document.getElementById('meta-step').classList.remove('hidden')
-    }
-
-    function showRecognized(manifest) {
-      const box = document.getElementById('recognized')
-      if (!manifest?.name) {
-        box.innerHTML = MB.esc(MB.t('recognizedUnknown'))
-        box.classList.remove('hidden')
-        fillMetaFromManifest(null)
-        return
-      }
-      const desc = manifest.description ? MB.esc(typeof manifest.description === 'string' ? manifest.description : (manifest.description.en || manifest.description.zh || '')) : ''
-      box.innerHTML = MB.t('recognizedHtml').replaceAll('{name}', MB.esc(manifest.name)).replaceAll('{version}', MB.esc(manifest.version || ''))
-        + (desc ? '<br>' + MB.t('recognizedDesc').replaceAll('{desc}', desc) : '')
-      box.classList.remove('hidden')
-      fillMetaFromManifest(manifest)
-    }
-
-    // Tag multi-select: click chips to toggle; at least one must stay on.
     const TAG_VALUES = ['general','business','it','finance','education','entertainment','media','healthcare','legal','engineering','other']
-    const chosenTags = new Set(['it'])
-    function selectedTags() { return [...chosenTags] }
-    function setTags(list, locked) {
-      chosenTags.clear()
-      for (const t of list) chosenTags.add(t)
-      document.querySelectorAll('#tag-group .chip').forEach(el => {
-        const on = chosenTags.has(el.dataset.tag)
-        el.classList.toggle('active', on)
-        el.classList.toggle('opacity-50', locked && !on)
-        el.style.pointerEvents = locked ? 'none' : ''
-      })
-      document.getElementById('category').value = selectedTags().join(',')
-    }
-    document.querySelectorAll('#tag-group .chip').forEach(el => {
-      el.addEventListener('click', () => {
-        const t = el.dataset.tag
-        if (chosenTags.has(t)) chosenTags.delete(t)
-        else chosenTags.add(t)
-        el.classList.toggle('active', chosenTags.has(t))
-        document.getElementById('category').value = selectedTags().join(',')
-      })
-    })
 
-    document.getElementById('archive').addEventListener('change', async event => {
-      const file = event.target.files[0]
-      if (!file) return
-      const box = document.getElementById('recognized')
-      box.classList.remove('hidden')
-      box.innerHTML = '…'
-      try {
-        showRecognized(await extractManifest(file))
-      } catch {
-        showRecognized(null)
-      }
-    })
-
-    // Empty credentials reach GoTrue as an anonymous signup and die with
-    // "Anonymous sign-ins are disabled" — validate before calling.
     function readCreds() {
       const email = document.getElementById('email').value.trim()
       const password = document.getElementById('password').value
@@ -243,45 +78,205 @@
       else { await MB.session(); maybeShowForm() }
     })
 
-    document.getElementById('submit-form').addEventListener('submit', async event => {
-      event.preventDefault()
-      const result = document.getElementById('result')
-      const file = document.getElementById('archive').files[0]
+    let author = ''
+    async function maybeShowForm() {
+      const s = await MB.session()
+      document.getElementById('auth-box').classList.toggle('hidden', !!s)
+      document.getElementById('form-box').classList.toggle('hidden', !s)
+      if (!s) return
+      const account = await MB.api('/api/account', { auth: true }).catch(() => null)
+      const gated = !account?.org
+      document.getElementById('org-gate').classList.toggle('hidden', !gated)
+      if (gated) return
+      author = account.org
+    }
+
+    // ---- step 1 → 2: read the zip, classify, check versions ----
+    let bundle = null // the detected { kind, ... } plus version statuses
+
+    document.getElementById('archive').addEventListener('change', async event => {
+      const file = event.target.files[0]
       if (!file) return
-      const btn = document.getElementById('btn-send')
-      btn.disabled = true
-      btn.textContent = MB.t('verifying')
-      result.innerHTML = ''
+      const box = document.getElementById('recognized')
+      const panel = document.getElementById('bundle')
+      box.classList.remove('hidden')
+      box.innerHTML = '…'
+      panel.classList.add('hidden')
+      panel.innerHTML = ''
       try {
-        const form = new FormData()
-        form.append('archive', file)
-        form.append('author', document.getElementById('author').value)
-        form.append('tags', document.getElementById('category').value)
-        form.append('license', document.getElementById('license').value)
-        form.append('homepage', document.getElementById('homepage').value)
-        const res = await MB.api('/api/submissions', { method: 'POST', body: form, auth: true })
-        if (res.ok) {
-          result.innerHTML = `<div class="notice ok">${MB.t('accepted')}</div>
-            <p><a href="#" id="status-link">${MB.t('refresh')}</a></p>`
-          result.querySelector('#status-link').addEventListener('click', e => { e.preventDefault(); poll(res.id) })
-        } else {
-          result.innerHTML = `<div class="notice bad">${MB.t('rejectedMachine')}</div>
-            ${renderReport(res.report)}`
-        }
+        const entries = await MB.zipEntries(file)
+        bundle = MB.detectBundle(entries)
+        if (!bundle) throw new Error(MB.t('noBundle'))
+        await enrichBundle()
+        box.innerHTML = recognizedLine(bundle)
+        renderBundle()
       } catch (e) {
-        result.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
-      } finally {
-        btn.disabled = false
-        btn.textContent = MB.t('send')
+        bundle = null
+        box.innerHTML = `<span class="text-danger">${MB.esc(e.message)}</span>`
       }
     })
 
-    async function poll(id) {
-      const res = await MB.api(`/api/submissions/${id}`, { auth: true })
-      document.getElementById('result').innerHTML = `
-        <div class="notice ${res.status === 'approved' ? 'ok' : res.status === 'rejected' ? 'bad' : 'info'}">
-          ${MB.t('status')}: ${MB.esc(res.status)}${res.reviewNote ? ' — ' + MB.esc(res.reviewNote) : ''}
-        </div>${renderReport(res.report)}`
+    function recognizedLine(b) {
+      const kind = b.kind === 'suite' ? MB.t('bundleSuite') : MB.t('bundlePack')
+      const name = b.kind === 'suite' ? b.manifest.name : b.packs.map(p => p.manifest.name).join(', ')
+      return `${MB.esc(kind)}: <b>${MB.esc(name)}</b>`
+    }
+
+    // Attach market-version status to every code@version in the bundle.
+    async function enrichBundle() {
+      if (bundle.kind === 'suite') {
+        bundle.status = await MB.versionStatus(bundle.manifest.name, bundle.manifest.version)
+        bundle.members = []
+        for (const name of bundle.manifest.members || []) {
+          const version = bundle.memberVersions?.[name]
+            || (bundle.entries.find(e => e.path === `${name}/manifest.json`)
+              ? JSON.parse(new TextDecoder().decode(bundle.entries.find(e => e.path === `${name}/manifest.json`).bytes)).version
+              : null)
+          bundle.members.push({ name, version, ...(version ? await MB.versionStatus(name, version) : { state: 'missing', current: null }) })
+        }
+      } else {
+        for (const p of bundle.packs) {
+          p.status = await MB.versionStatus(p.manifest.name, p.manifest.version)
+        }
+      }
+    }
+
+    const STATUS_CLASS = { new: 'ok', update: 'info', unchanged: '', tooLow: 'bad', missing: 'bad' }
+
+    function statusChip(state, current) {
+      const cls = state === 'unchanged' ? 'chip' : `notice ${STATUS_CLASS[state] || ''} !inline-block !my-0 !py-0.5`
+      const label = state === 'missing' ? MB.t('missingMember') : MB.t('status_' + state)
+      return `<span class="${cls}">${MB.esc(label)}${current ? ` (@${MB.esc(current)})` : ''}</span>`
+    }
+
+    function renderBundle() {
+      const panel = document.getElementById('bundle')
+      if (bundle.kind === 'suite') renderSuite()
+      else renderPacks()
+      panel.classList.remove('hidden')
+    }
+
+    // ---- suite bundle: display + one confirm button ----
+    function renderSuite() {
+      const panel = document.getElementById('bundle')
+      const m = bundle.manifest
+      const blocked = bundle.status.state === 'tooLow'
+      const memberRows = bundle.members.map(mem => `
+        <tr>
+          <td class="font-mono">${MB.esc(mem.name)}</td>
+          <td class="font-mono">@${MB.esc(mem.version ?? '—')}</td>
+          <td>${statusChip(mem.state, mem.current)}</td>
+        </tr>`).join('')
+      panel.innerHTML = `
+        <section class="block !my-4">
+          <h2 class="text-base font-semibold">${MB.esc(MB.t('bundleSuite'))}: ${MB.esc(m.name)}<span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(m.version)}</span></h2>
+          <p class="muted text-[13px]">${MB.esc(MB.t('versionRule'))}</p>
+          <table class="kv max-w-xl">
+            <tr><td>${MB.esc(MB.t('membersLabel'))}</td><td class="font-mono">${MB.esc((m.members || []).join(', '))}</td></tr>
+            <tr><td>${MB.esc(MB.t('category'))}</td><td class="font-mono">${MB.esc((m.tags || []).join(', '))}</td></tr>
+          </table>
+          <table class="kv max-w-xl"><thead><tr><th>${MB.t('memberPacks')}</th><th>version</th><th>status</th></tr></thead><tbody>${memberRows}</tbody></table>
+          <div id="suite-msg"></div>
+          <button id="btn-suite-send" class="primary mt-3" type="button" ${blocked ? 'disabled' : ''} data-i18n="submitAll"></button>
+          ${blocked ? `<p class="notice bad !inline-block">${MB.esc(MB.t('statusTooLow'))}</p>` : ''}
+        </section>`
+      document.getElementById('btn-suite-send').addEventListener('click', submitSuite)
+    }
+
+    async function submitSuite() {
+      const msg = document.getElementById('suite-msg')
+      const btn = document.getElementById('btn-suite-send')
+      const m = bundle.manifest
+      btn.disabled = true
+      try {
+        // Member packs with a HIGHER version than the market are submitted
+        // first (machine verify + review), then the suite form itself.
+        for (const mem of bundle.members.filter(x => x.state === 'update')) {
+          msg.innerHTML = `<div class="notice info">${MB.esc(MB.t('submittingItem').replaceAll('{name}', MB.esc(mem.name)))}</div>`
+          const files = bundle.entries.filter(e => e.path.startsWith(mem.name + '/'))
+          const tgz = await MB.makeTarGz(files.map(e => ({ path: e.path.slice(mem.name.length + 1), bytes: e.bytes })))
+          const form = new FormData()
+          form.append('archive', new File([tgz], `${mem.name}-${mem.version}.tgz`), `${mem.name}-${mem.version}.tgz`)
+          const memberManifest = JSON.parse(new TextDecoder().decode(
+            bundle.entries.find(e => e.path === `${mem.name}/manifest.json`).bytes))
+          form.append('author', memberManifest.author || author)
+          form.append('tags', (memberManifest.tags || ['other']).join(','))
+          form.append('license', memberManifest.license || 'MIT')
+          form.append('homepage', memberManifest.homepage || '')
+          await MB.api('/api/submissions', { method: 'POST', body: form, auth: true })
+        }
+        msg.innerHTML = `<div class="notice info">${MB.esc(MB.t('submittingItem').replaceAll('{name}', MB.esc(m.name)))}</div>`
+        const zhDesc = m.description?.zh || ''
+        await MB.api('/api/my/suites', {
+          method: 'POST', auth: true,
+          body: {
+            name: m.name,
+            version: m.version,
+            description: Object.assign({ en: m.description?.en || '' }, zhDesc ? { zh: zhDesc } : {}),
+            title: m.title || null,
+            tags: m.tags || ['other'],
+            members: m.members || [],
+          },
+        })
+        msg.innerHTML = `<div class="notice ok">${MB.esc(MB.t('suiteQueued'))}
+          <p><a href="/packs.html">${MB.t('trackInPacks')}</a></p></div>`
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      } finally {
+        btn.disabled = false
+      }
+    }
+
+    // ---- pack bundle(s): metadata confirmed from the manifest, one tgz each ----
+    function renderPacks() {
+      const panel = document.getElementById('bundle')
+      panel.innerHTML = bundle.packs.map((p, i) => {
+        const m = p.manifest
+        const blocked = p.status.state === 'tooLow'
+        return `
+        <section class="block !my-4" data-pack-index="${i}">
+          <h2 class="text-base font-semibold">${MB.esc(MB.displayTitle(m) !== m.name ? MB.displayTitle(m) + ' — ' : '')}${MB.esc(m.name)}<span class="font-mono text-[13px] font-semibold text-primary dark:text-accent-strong">@${MB.esc(m.version)}</span> ${statusChip(p.status.state, p.status.current)}</h2>
+          <p class="muted text-[13px]" data-i18n="lockedFromArchive"></p>
+          <label class="field"><span data-i18n="author"></span><input class="f-author" value="${MB.esc(m.author || author || '')}" ${m.author ? 'disabled' : 'required'}></label>
+          <label class="field"><span data-i18n="license"></span><input class="f-license" value="${MB.esc(m.license || 'MIT')}" ${m.license ? 'disabled' : ''}></label>
+          <label class="field"><span data-i18n="homepage"></span><input class="f-homepage" type="url" value="${MB.esc(m.homepage || '')}" ${m.homepage ? 'disabled' : ''}></label>
+          <div class="e-msg"></div>
+          <button class="primary f-send" type="button" ${blocked ? 'disabled' : ''} data-i18n="submitAll"></button>
+        </section>`
+      }).join('')
+      panel.querySelectorAll('[data-pack-index]').forEach(section => {
+        const p = bundle.packs[Number(section.dataset.packIndex)]
+        section.querySelector('.f-send').addEventListener('click', e => submitPack(p, section, e.target))
+      })
+    }
+
+    async function submitPack(p, section, btn) {
+      const msg = section.querySelector('.e-msg')
+      const m = p.manifest
+      btn.disabled = true
+      try {
+        msg.innerHTML = `<div class="notice info">${MB.esc(MB.t('submittingItem').replaceAll('{name}', MB.esc(m.name)))}</div>`
+        const files = p.dir ? p.files.map(e => ({ path: e.path.slice(p.dir.length + 1), bytes: e.bytes }))
+                            : p.files.map(e => ({ path: e.path, bytes: e.bytes }))
+        const tgz = await MB.makeTarGz(files)
+        const form = new FormData()
+        form.append('archive', new File([tgz], `${m.name}-${m.version}.tgz`), `${m.name}-${m.version}.tgz`)
+        form.append('author', section.querySelector('.f-author').value)
+        form.append('tags', (m.tags || ['other']).join(','))
+        form.append('license', section.querySelector('.f-license').value)
+        form.append('homepage', section.querySelector('.f-homepage').value)
+        const res = await MB.api('/api/submissions', { method: 'POST', body: form, auth: true })
+        if (res.ok) {
+          msg.innerHTML = `<div class="notice ok">${MB.esc(MB.t('accepted'))}
+            <p><a href="/packs.html">${MB.t('trackInPacks')}</a></p></div>`
+        } else {
+          msg.innerHTML = `<div class="notice bad">${MB.t('rejectedMachine')}</div>${renderReport(res.report)}`
+        }
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      } finally {
+        btn.disabled = false
+      }
     }
 
     function renderReport(report) {
