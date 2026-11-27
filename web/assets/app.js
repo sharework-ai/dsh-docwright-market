@@ -882,7 +882,7 @@ window.MB = (() => {
         const { suite, members } = await api(`/api/suites/${encodeURIComponent(name)}`)
         // The suite's own manifest — same file layout convention as packs.
         entries.push({
-          path: `${suite.name}/manifest.json`,
+          path: 'manifest.json',
           bytes: new TextEncoder().encode(JSON.stringify({
             name: suite.name,
             org: suite.org ?? null,
