@@ -68,6 +68,7 @@
             <tr><td>${MB.t('category')}</td><td>${MB.esc(pack.category)}</td></tr>
             <tr><td>${MB.t('license')}</td><td>${MB.esc(pack.license)}</td></tr>
             <tr><td>${MB.t('consumes')}</td><td class="font-mono">${MB.esc((pack.consumes || []).join(', ')) || '—'}</td></tr>
+            <tr><td title="${MB.esc(MB.t('compatibleFromHint'))}">${MB.t('compatibleFrom')}</td><td class="font-mono">${MB.esc(pack.compatibleFrom || '—')}</td></tr>
             <tr><td>${MB.t('languages')}</td><td class="font-mono">${MB.esc((pack.languages || []).join(', '))}</td></tr>
             <tr><td>${MB.t('requiresTopic')}</td><td>${pack.requiresTopic ? MB.t('yes') : MB.t('no')}</td></tr>
             <tr><td>${MB.t('artifactPrefix')}</td><td class="font-mono">${MB.esc(pack.artifactPrefix || '—')}</td></tr>
