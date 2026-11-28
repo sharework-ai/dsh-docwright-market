@@ -119,8 +119,10 @@ verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
   `supabase-smtp`,账号 sharework@qq.com;登记表见 commons/supabase
   values-project.yaml)。
 - **dev 与生产共用同一套 supabase-auth**——改 AUTOCONFIRM、SMTP、模板等
-  auth 配置同时影响两个市场;e2e 的注册场景受验证码流程影响,跑 e2e 前先
-  用 admin 接口建号或手工取码。
+  auth 配置同时影响两个市场。e2e 的建号走 admin 接口(email_confirm=true),
+  不经邮件,不受验证码流程影响;注册→OTP 公开流程由 `08-signup-otp` 场景
+  覆盖(需 env `E2E_QQ_AUTH_CODE` = 测试邮箱授权码,场景会先删掉遗留的测试
+  账号再走真实邮箱取码,结束删除账号与邮件)。
 - e2e 的目录重置是**残留范围删除**(按测试邮箱域),绝不能 truncate——线上
   目录属于真实账号;e2e 结束时 teardown 删除本次创建的账号与其数据。
 
