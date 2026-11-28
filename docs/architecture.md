@@ -115,5 +115,5 @@ approve 时从投稿者当前 profile 盖章进 packs。
 
 索引 `format: 2` 是版本化契约:相对路径(经服务端路由)+ org + versions[];
 顶层 per-pack 字段保持指向最新版,未钉版的安装行为与 format:1 完全一致。
-密码修改不走服务端:浏览器持会话令牌直调 GoTrue `PUT /auth/v1/user`
+密码与邮箱修改不走服务端:浏览器持会话令牌直调 GoTrue `PUT /auth/v1/user`
 (自托管 AUTOCONFIRM 无邮件依赖),符合"浏览器直接承担认证面"的既有边界。

@@ -106,8 +106,8 @@ verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
   GOTRUE_API_PORT=9999 对齐 svc targetPort,labels 三件套对齐 svc selector)。
   改 auth 配置 = 直接改该 deployment;升级 operator 前先备份其 spec。
 - 账号注册即确认(AUTOCONFIRM,无 SMTP);管理员 = profiles.is_admin=true。
-  密码修改 = 浏览器侧 `PUT /auth/v1/user`(supabase-js updateUser),无需改
-  auth 配置。
+  密码修改与邮箱修改 = 浏览器侧 `PUT /auth/v1/user`(supabase-js updateUser),
+  无需改 auth 配置。
 - e2e 的目录重置是**残留范围删除**(按测试邮箱域),绝不能 truncate——线上
   目录属于真实账号;e2e 结束时 teardown 删除本次创建的账号与其数据。
 

@@ -29,6 +29,16 @@
       </section>
 
       <section class="block card">
+        <h3 data-i18n="emailTitle"></h3>
+        <p class="muted text-[13px]" data-i18n="emailHint"></p>
+        <p id="email-current" class="muted"></p>
+        <label class="field"><span data-i18n="currentPassword"></span><input id="email-password" type="password" autocomplete="current-password" minlength="6"></label>
+        <label class="field"><span data-i18n="newEmail"></span><input id="new-email" type="email" autocomplete="email"></label>
+        <div id="email-msg"></div>
+        <button id="btn-email" class="primary" data-i18n="changeEmail"></button>
+      </section>
+
+      <section class="block card">
         <h3 data-i18n="tzTitle"></h3>
         <p class="muted text-[13px]" data-i18n="tzHint"></p>
         <label class="field"><span data-i18n="tzLabel"></span><select id="tz-select"></select></label>
@@ -111,6 +121,48 @@
       }
     })
 
+    // ---- email card -------------------------------------------------------------
+    // The account is keyed by the internal auth id; the email is only the login
+    // handle. Verify the current password first (same trick as the password
+    // card), then let GoTrue apply the change — this host runs with
+    // MAILER_AUTOCONFIRM, so no confirmation email is involved.
+    let currentEmail = ''
+    async function loadEmail() {
+      currentEmail = (await MB.session())?.user?.email ?? ''
+      document.getElementById('email-current').textContent = currentEmail
+        ? `${MB.t('currentEmail')}: ${currentEmail}`
+        : ''
+    }
+
+    document.getElementById('btn-email').addEventListener('click', async () => {
+      const msg = document.getElementById('email-msg')
+      const current = document.getElementById('email-password').value
+      const next = document.getElementById('new-email').value.trim()
+      if (!currentEmail || !current || !next) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('emailFillRequired'))}</div>`
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('emailInvalid'))}</div>`
+        return
+      }
+      try {
+        // Verify the current password by signing in with it — GoTrue answers
+        // invalid-credentials on a mismatch; this also refreshes the session.
+        const { error } = await MB.supabase.auth.signInWithPassword({ email: currentEmail, password: current })
+        if (error) throw new Error(MB.t('currentPassword') + ': ' + error.message)
+        const { error: updateError } = await MB.supabase.auth.updateUser({ email: next })
+        if (updateError) throw updateError
+        msg.innerHTML = `<div class="notice ok">${MB.t('emailChanged')}</div>`
+        setTimeout(async () => {
+          await MB.supabase.auth.signOut()
+          location.reload()
+        }, 1500)
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      }
+    })
+
     // ---- org card ---------------------------------------------------------------
     async function loadOrg() {
       const acc = await MB.api('/api/account', { auth: true })
@@ -152,6 +204,7 @@
       document.getElementById('content').classList.toggle('hidden', !s)
       if (!s) return
       await loadOrg().catch(() => {})
+      await loadEmail().catch(() => {})
     }
 
     maybeShowContent()

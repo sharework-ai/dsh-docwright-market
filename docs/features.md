@@ -51,8 +51,9 @@
 ## 账号与权限
 
 - 注册仅需邮箱+密码(自托管实例 AUTOCONFIRM,无邮件依赖);作者身份 = 账号,
-  不需要 git/GitHub。密码修改在 `/account.html` 浏览器侧完成(先验当前密码,
-  再经 GoTrue `PUT /auth/v1/user` 轮换),无需服务端参与。
+  不需要 git/GitHub。密码修改与邮箱修改都在 `/account.html` 浏览器侧完成(先验当前密码,
+  再经 GoTrue `PUT /auth/v1/user` 轮换),无需服务端参与。账号以内部 id 为键,
+  改邮箱不影响名下的 pack、组织和投稿记录。
 - 管理员 = `profiles.is_admin = true` 的账号(首任管理员由部署者手工指定,
   见部署文档)。管理员的权力仅限审核队列;pack 的属主操作与管理员无关。
 - **发布者组织**:每个账号可设置一个 org(小写 kebab-case,全局唯一,
