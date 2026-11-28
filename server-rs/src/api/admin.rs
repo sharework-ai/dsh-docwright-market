@@ -271,8 +271,8 @@ pub(crate) async fn upsert_published_pack(
     sqlx::query(
         "insert into packs (name, version, description, title, tags, author, author_id, license, \
          homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
-         content_hash, tarball_path, tarball_sha256, org, suite, assets) \
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) \
+         content_hash, tarball_path, tarball_sha256, org, suite, assets, compatible_from) \
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) \
          on conflict (name) do update set \
            version = excluded.version, \
            description = excluded.description, \
@@ -317,6 +317,7 @@ pub(crate) async fn upsert_published_pack(
             .map(|code| format!("{org}/{code}")),
     )
     .bind(manifest.get("assets").cloned())
+    .bind(manifest.get("compatibleFrom").and_then(Value::as_str))
     .execute(&mut *tx)
     .await?;
     // History row for this exact version. `on conflict do nothing` keeps an
@@ -324,8 +325,8 @@ pub(crate) async fn upsert_published_pack(
     sqlx::query(
         "insert into pack_versions (name, version, description, content_hash, tarball_path, \
          tarball_sha256, has_function_rules, consumes, languages, requires_topic, \
-         artifact_prefix, published_at, submission_id) \
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), $12) \
+         artifact_prefix, compatible_from, published_at, submission_id) \
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13) \
          on conflict (name, version) do nothing",
     )
     .bind(&sub.pack_name)
@@ -339,6 +340,7 @@ pub(crate) async fn upsert_published_pack(
     .bind(manifest.get("languages").cloned().unwrap_or(json!([])))
     .bind(manifest.get("requiresTopic").and_then(Value::as_bool).unwrap_or(false))
     .bind(manifest.get("artifactPrefix").and_then(Value::as_str))
+    .bind(manifest.get("compatibleFrom").and_then(Value::as_str))
     .bind(sub.id)
     .execute(&mut *tx)
     .await?;

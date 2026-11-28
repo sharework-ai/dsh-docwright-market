@@ -228,14 +228,17 @@ async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
         "languages": ["zh-CN"],
         "requiresTopic": true,
         "artifactPrefix": "CARD",
+        "compatibleFrom": "0.0.9",
     });
     upsert_published_pack(&pool, &sub, &manifest, "sha256:h1", true, "tarballs/p-0.1.0.tgz", "sha256:t1", "sharework-ai")
         .await
         .expect("first publish writes the row");
 
-    let row: (String, Value, bool, bool, Vec<String>, String, Option<String>, String) = sqlx::query_as(
+    let row: (String, Value, bool, bool, Vec<String>, String, Option<String>, String, Option<String>, Option<String>) = sqlx::query_as(
         "select version, description, has_function_rules, requires_topic, tags, author, \
-         org, status from packs where name = 'published-pack'",
+         org, status, compatible_from, \
+         (select compatible_from from pack_versions where name = 'published-pack' limit 1) \
+         from packs where name = 'published-pack'",
     )
     .fetch_one(&pool)
     .await
@@ -248,6 +251,10 @@ async fn first_publish_lands_the_catalog_row_and_the_history(pool: PgPool) {
     assert_eq!(row.5, "sharework-ai");
     assert_eq!(row.6.as_deref(), Some("sharework-ai"), "org stamped from the uploader profile");
     assert_eq!(row.7, "active", "new packs start active");
+    // compatibleFrom rides the manifest into the catalog AND the history row
+    // (the update lane reads the floor of the exact version it installs).
+    assert_eq!(row.8.as_deref(), Some("0.0.9"));
+    assert_eq!(row.9.as_deref(), Some("0.0.9"));
 
     // The publish also opened the version history, carrying provenance.
     let (versions, submission_id): (i64, Option<Uuid>) = sqlx::query_as(
