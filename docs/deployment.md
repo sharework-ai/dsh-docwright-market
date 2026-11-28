@@ -105,9 +105,14 @@ verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
   (gotrue v2.197.0,DATABASE_URL 走 postgres 超级用户 + search_path=auth,
   GOTRUE_API_PORT=9999 对齐 svc targetPort,labels 三件套对齐 svc selector)。
   改 auth 配置 = 直接改该 deployment;升级 operator 前先备份其 spec。
-- 账号注册即确认(AUTOCONFIRM,无 SMTP);管理员 = profiles.is_admin=true。
+- 账号注册即确认(AUTOCONFIRM,注册不发邮件);管理员 = profiles.is_admin=true。
   密码修改与邮箱修改 = 浏览器侧 `PUT /auth/v1/user`(supabase-js updateUser),
   无需改 auth 配置。
+- 出站邮件(忘记密码等恢复邮件)= QQ 邮箱 SMTP(supabase-auth deployment 的
+  GOTRUE_SMTP_* 环境变量,凭据在 supabase ns Secret `supabase-smtp`,
+  账号 sharework@qq.com;登记表见 commons/supabase values-project.yaml)。
+  注册确认仍走 AUTOCONFIRM 不发邮件;哪天关 AUTOCONFIRM 开注册验证,
+  需同步改市场页面上"注册即时生效"的提示文案。
 - e2e 的目录重置是**残留范围删除**(按测试邮箱域),绝不能 truncate——线上
   目录属于真实账号;e2e 结束时 teardown 删除本次创建的账号与其数据。
 
