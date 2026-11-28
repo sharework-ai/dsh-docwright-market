@@ -22,6 +22,7 @@ use crate::storage;
 pub struct PackRow {
     pub name: String,
     pub version: String,
+    pub compatible_from: Option<String>,
     pub description: Value,
     pub tags: Vec<String>,
     pub title: Option<Value>,
@@ -45,7 +46,7 @@ pub struct PackRow {
     pub updated: DateTime<Utc>,
 }
 
-const PACK_COLUMNS: &str = "name, version, description, title, tags, suite, assets, author, author_id, license, \
+const PACK_COLUMNS: &str = "name, version, compatible_from, description, title, tags, suite, assets, author, author_id, license, \
      homepage, consumes, languages, requires_topic, artifact_prefix, has_function_rules, \
      content_hash, tarball_path, tarball_sha256, org, status, added, updated";
 
@@ -214,6 +215,7 @@ pub async fn index(State(state): State<Arc<AppState>>) -> Result<Json<Value>, Ap
             "org": r.org,
             "license": r.license,
             "consumes": r.consumes,
+            "compatibleFrom": r.compatible_from,
             "languages": r.languages,
             "requiresTopic": r.requires_topic,
             "artifactPrefix": r.artifact_prefix,
@@ -338,6 +340,7 @@ fn pack_json(r: &PackRow) -> Value {
         "license": r.license,
         "homepage": r.homepage,
         "consumes": r.consumes,
+            "compatibleFrom": r.compatible_from,
         "languages": r.languages,
         "requiresTopic": r.requires_topic,
         "artifactPrefix": r.artifact_prefix,
