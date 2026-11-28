@@ -121,5 +121,6 @@ print(u["id"])')"
   # The OTP-verified identity must pass the market's own auth.
   code="$(http_code "$MARKET/api/account" -H "Authorization: Bearer $token")"
   assert_eq "$code" "200" "market auth must accept the OTP-verified account" || return 1
+  mailbox_purge   # no garbage: the OTP mail goes away with the account
   echo "  signup OTP round-trip ok; OTP-verified identity passes market auth"
 }

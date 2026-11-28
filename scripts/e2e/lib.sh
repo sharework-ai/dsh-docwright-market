@@ -256,7 +256,7 @@ submit_archive() {
   local raw code json
   raw="$(curl -s -m 120 -w '\n%{http_code}' "$MARKET/api/submissions" -H "Authorization: Bearer $token" \
     -F "archive=@${archive:-$M/samples/task-card.tgz}" \
-    -F "author=sharework-ai" -F "category=dev" -F "license=MIT")" \
+    -F "author=sharework-ai" -F "tags=it" -F "license=MIT")" \
     || { sc_fail "submit call failed (transport)"; return 1; }
   code="$(echo "$raw" | tail -1)"
   json="$(echo "$raw" | sed '$d')"

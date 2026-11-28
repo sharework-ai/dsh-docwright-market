@@ -35,13 +35,14 @@ scenario_web_pages() {
   assert_contains "$listing" '"packs":[]' "member-name search returns no packs" || return 1
   assert_contains "$listing" "\"name\":\"$SUITE_NAME\"" "member-name search lands on the suite card" || return 1
 
-  # submit.html: two submission modes — pack upload AND suite form.
+  # submit.html: the rebuilt page hosts BOTH submission modes — the pack
+  # archive picker, the suite member list, and the signup confirm field.
   local submit
   submit="$(curl -sf -m 10 "$MARKET/submit.html")"
-  assert_contains "$submit" 'id="submit-form"' "submit page keeps the pack upload form" || return 1
-  assert_contains "$submit" 'id="suite-form"' "submit page carries the suite form" || return 1
-  assert_contains "$submit" 'id="su-members"' "suite form takes the member list" || return 1
-  assert_contains "$submit" 'id="tab-suite"' "submit page has the suite mode switch" || return 1
+  assert_contains "$submit" 'id="archive"' "submit page keeps the pack upload picker" || return 1
+  assert_contains "$submit" 'id="bundle"' "submit page carries the bundle preview area" || return 1
+  assert_contains "$submit" 'id="btn-suite-send"' "submit page carries the suite submit button" || return 1
+  assert_contains "$submit" 'id="password2"' "submit page signup asks the password twice" || return 1
 
   # account.html: the timezone picker lives there (not in the header).
   local account
@@ -53,7 +54,7 @@ scenario_web_pages() {
   # tz select anymore.
   local index
   index="$(curl -sf -m 10 "$MARKET/index.html")"
-  assert_contains "$index" 'class="card suite"' "listing renders suite cards with the purple tint" || return 1
+  assert_contains "$index" 'class="card suite relative cursor-pointer"' "listing renders suite cards with the purple tint" || return 1
   assert_contains "$index" 'suitesAll' "listing merges the suites array" || return 1
 
   # Entry query strings are accepted by every page (static serving just

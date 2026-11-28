@@ -28,7 +28,7 @@ scenario_rules() {
 
   # R7 (before any publish): submitting without a publisher org -> 403.
   code="$(http_code "$MARKET/api/submissions" -H "Authorization: Bearer $owner_token" \
-    -F "archive=@$FIX" -F "author=owner" -F "category=dev" -F "license=MIT")"
+    -F "archive=@$FIX" -F "author=owner" -F "tags=it" -F "license=MIT")"
   assert_eq "$code" "403" "submit without org must 403" || return 1
   echo "  R7 submit without org -> 403"
 
@@ -42,11 +42,11 @@ scenario_rules() {
     -H 'Content-Type: application/json' -d '{"action":"approve"}' >/dev/null \
     || { sc_fail "seed approve failed"; return 1; }
 
-  # R2: invalid category -> 400 before anything is stored or verified
+  # R2: invalid tag -> 400 before anything is stored or verified
   code="$(http_code "$MARKET/api/submissions" -H "Authorization: Bearer $owner_token" \
-    -F "archive=@$FIX" -F "author=x" -F "category=nope" -F "license=MIT")"
-  assert_eq "$code" "400" "bad category must 400" || return 1
-  echo "  R2 invalid category -> 400"
+    -F "archive=@$FIX" -F "author=x" -F "tags=nope" -F "license=MIT")"
+  assert_eq "$code" "400" "bad tag must 400" || return 1
+  echo "  R2 invalid tag -> 400"
 
   # R3: non-admin cannot read the review queue -> 403
   code="$(http_code "$MARKET/api/admin/queue" -H "Authorization: Bearer $owner_token")"
@@ -57,19 +57,19 @@ scenario_rules() {
   #     (org'd, verifier-green bumped archive, so the rejection lands on
   #     ownership rather than the org gate)
   code="$(http_code "$MARKET/api/submissions" -H "Authorization: Bearer $intruder_token" \
-    -F "archive=@$FIX_V2" -F "author=intruder" -F "category=dev" -F "license=MIT")"
+    -F "archive=@$FIX_V2" -F "author=intruder" -F "tags=it" -F "license=MIT")"
   assert_eq "$code" "403" "cross-account update must 403" || return 1
   echo "  R4 cross-account update -> 403"
 
   # R5: an already-used (name, version) pair is rejected forever -> 409
   code="$(http_code "$MARKET/api/submissions" -H "Authorization: Bearer $owner_token" \
-    -F "archive=@$FIX" -F "author=owner" -F "category=dev" -F "license=MIT")"
+    -F "archive=@$FIX" -F "author=owner" -F "tags=it" -F "license=MIT")"
   assert_eq "$code" "409" "reused version must 409" || return 1
   echo "  R5 reused version -> 409"
 
   # R6: identical content under a bumped version -> 409 (nothing to update)
   code="$(http_code "$MARKET/api/submissions" -H "Authorization: Bearer $owner_token" \
-    -F "archive=@$FIX" -F "author=owner" -F "category=dev" -F "license=MIT")"
+    -F "archive=@$FIX" -F "author=owner" -F "tags=it" -F "license=MIT")"
   # Same call as R5 — the distinct rule (content-hash equality) is covered by
   # the sqlx::test unit; at the API level it surfaces as the same 409 family.
   assert_eq "$code" "409" "same-version resubmission must 409" || return 1
@@ -104,7 +104,7 @@ scenario_builtin_collision() {
 
   local res
   res="$(curl -sf -m 120 "$MARKET/api/submissions" -H "Authorization: Bearer $LAST_TOKEN" \
-    -F "archive=@$T/collision.tgz" -F "author=intruder" -F "category=dev" -F "license=MIT")"
+    -F "archive=@$T/collision.tgz" -F "author=intruder" -F "tags=it" -F "license=MIT")"
   assert_contains "$res" '"ok":false' "malformed submission is refused" || return 1
   assert_contains "$res" 'must equal manifest.name' "refusal names the dir-mismatch rule" || return 1
   echo "  builtin-name collision refused, nothing stored"

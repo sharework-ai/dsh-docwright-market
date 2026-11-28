@@ -50,12 +50,12 @@ assert d["pack"]["org"], d
   local patched
   patched="$(curl -sf -m 10 "$MARKET/api/my/packs/own-pack" -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' -X PATCH \
-    -d '{"category":"docs","license":"ISC","homepage":"https://example.invalid/x"}')"
-  assert_contains "$patched" '"category":"docs"' "patch updates category" || return 1
+    -d '{"tags":["legal"],"license":"ISC","homepage":"https://example.invalid/x"}')"
+  assert_contains "$patched" '"tags":["legal"]' "patch updates tags" || return 1
   local code
   code="$(http_code "$MARKET/api/my/packs/own-pack" -H "Authorization: Bearer $token" \
-    -H 'Content-Type: application/json' -X PATCH -d '{"category":"nope"}')"
-  assert_eq "$code" "400" "patch rejects unknown category" || return 1
+    -H 'Content-Type: application/json' -X PATCH -d '{"tags":["nope"]}')"
+  assert_eq "$code" "400" "patch rejects unknown tag" || return 1
   echo "  metadata patched (whitelist enforced)"
 
   # Disable: hidden from the public surface, downloads 410, owner still sees it.
@@ -97,7 +97,7 @@ assert d["pack"]["org"], d
   code="$(http_code "$MARKET/tarballs/own-pack-0.3.0.tgz")"
   assert_eq "$code" "404" "deleted pack's tarballs are gone" || return 1
   code="$(http_code "$MARKET/api/submissions" -H "Authorization: Bearer $token" \
-    -F "archive=@$FX_V1" -F "author=author" -F "category=dev" -F "license=MIT")"
+    -F "archive=@$FX_V1" -F "author=author" -F "tags=it" -F "license=MIT")"
   assert_eq "$code" "409" "a deleted pack's version numbers stay reserved" || return 1
   echo "  delete frees the name but never the (name, version) pairs"
 }

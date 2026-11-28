@@ -32,7 +32,7 @@ submit_suite() {
   local raw code json
   raw="$(curl -s -m 10 -w '\n%{http_code}' "$MARKET/api/my/suites" "${AUTH_LAST[@]}" \
     -H 'Content-Type: application/json' \
-    -d "{\"name\":\"$SUITE_NAME\",\"version\":\"1.0.0\",\"description\":{\"en\":\"e2e suite\",\"zh\":\"e2e 套件\"},\"category\":\"dev\",\"members\":[\"$SUITE_A\",\"$SUITE_B\"]}")" \
+    -d "{\"name\":\"$SUITE_NAME\",\"version\":\"1.0.0\",\"description\":{\"en\":\"e2e suite\",\"zh\":\"e2e 套件\"},\"tags\":[\"it\"],\"members\":[\"$SUITE_A\",\"$SUITE_B\"]}")" \
     || { sc_fail "suite create transport failure"; return 1; }
   code="$(echo "$raw" | tail -1)"
   json="$(echo "$raw" | sed '$d')"
@@ -194,18 +194,18 @@ scenario_suite_validation() {
   # Unknown member → loud rejection, nothing queued.
   local code
   code="$(http_code "$MARKET/api/my/suites" "${AUTH_LAST[@]}" -H 'Content-Type: application/json' -X POST \
-    -d "{\"name\":\"$SUITE_NAME-bad\",\"version\":\"1.0.0\",\"description\":{\"en\":\"x\"},\"category\":\"dev\",\"members\":[\"$SUITE_A\",\"ghost-pack\"]}")"
+    -d "{\"name\":\"$SUITE_NAME-bad\",\"version\":\"1.0.0\",\"description\":{\"en\":\"x\"},\"tags\":[\"it\"],\"members\":[\"$SUITE_A\",\"ghost-pack\"]}")"
   assert_eq "$code" "400" "unknown member must be rejected" || return 1
 
-  # Bad category → rejected.
+  # Bad tag → rejected.
   code="$(http_code "$MARKET/api/my/suites" "${AUTH_LAST[@]}" -H 'Content-Type: application/json' -X POST \
-    -d "{\"name\":\"$SUITE_NAME-bad\",\"version\":\"1.0.0\",\"description\":{\"en\":\"x\"},\"category\":\"not-a-cat\",\"members\":[\"$SUITE_A\"]}")"
-  assert_eq "$code" "400" "bad category must be rejected" || return 1
+    -d "{\"name\":\"$SUITE_NAME-bad\",\"version\":\"1.0.0\",\"description\":{\"en\":\"x\"},\"tags\":[\"not-a-tag\"],\"members\":[\"$SUITE_A\"]}")"
+  assert_eq "$code" "400" "bad tag must be rejected" || return 1
 
   # Valid create, then a duplicate name → rejected.
   submit_suite || return 1
   code="$(http_code "$MARKET/api/my/suites" "${AUTH_LAST[@]}" -H 'Content-Type: application/json' -X POST \
-    -d "{\"name\":\"$SUITE_NAME\",\"version\":\"1.0.0\",\"description\":{\"en\":\"dup\"},\"category\":\"dev\",\"members\":[\"$SUITE_A\"]}")"
+    -d "{\"name\":\"$SUITE_NAME\",\"version\":\"1.0.0\",\"description\":{\"en\":\"dup\"},\"tags\":[\"it\"],\"members\":[\"$SUITE_A\"]}")"
   assert_eq "$code" "409" "duplicate suite name must be rejected" || return 1
 }
 
@@ -261,7 +261,7 @@ scenario_suite_edit_delete() {
   local raw code
   raw="$(curl -s -m 10 -w '\n%{http_code}' "$MARKET/api/my/suites/$SUITE_NAME" "${AUTH_LAST[@]}" \
     -H 'Content-Type: application/json' -X PATCH \
-    -d '{"version":"1.1.0","description":{"en":"e2e suite v2"},"category":"dev","members":["'$SUITE_B'"]}')"
+    -d '{"version":"1.1.0","description":{"en":"e2e suite v2"},"tags":["it"],"members":["'$SUITE_B'"]}')"
   code="$(echo "$raw" | tail -1)"
   assert_eq "$code" "200" "suite edit accepted" || return 1
   assert_contains "$detail" '"members"' "live suite still serves the old shape meanwhile" || return 1
