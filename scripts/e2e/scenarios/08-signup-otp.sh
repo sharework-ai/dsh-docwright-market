@@ -95,6 +95,8 @@ scenario_signup_otp() {
     || { sc_fail "public signup failed"; return 1; }
   assert_eq "$(echo "$res" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("session") is None)')" \
     "True" "signup must return no session (OTP confirmation required)" || return 1
+  # Register the id right away — even a failed OTP step gets cleaned up.
+  echo "$res" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])' >>"$CREATED_USERS_FILE"
 
   # Pull the code from the mailbox and verify it.
   local otp
@@ -116,6 +118,7 @@ print(s["access_token"])')"
 b = json.load(sys.stdin)
 u = b.get("user") or b
 print(u["id"])')"
+  # (already registered for teardown at signup time)
   echo "$uid" >>"$CREATED_USERS_FILE"
 
   # The OTP-verified identity must pass the market's own auth.
