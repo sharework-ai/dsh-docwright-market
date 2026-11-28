@@ -13,10 +13,19 @@
 
     <div id="auth-box" class="card">
       <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
-      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="new-password" minlength="6"></label>
+      <label class="field"><span data-i18n="confirmPassword"></span><input id="password2" type="password" autocomplete="new-password" minlength="6"></label>
       <div id="auth-error"></div>
       <button id="btn-signin" class="primary" data-i18n="signIn"></button>
       <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
+    </div>
+
+    <div id="otp-box" class="card hidden">
+      <p id="otp-sent" class="muted text-[13px]"></p>
+      <label class="field"><span data-i18n="otpLabel"></span><input id="otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*"></label>
+      <div id="otp-msg"></div>
+      <button id="btn-otp-verify" class="primary" data-i18n="otpVerify"></button>
+      <button id="btn-otp-resend" class="secondary" data-i18n="otpResend"></button>
     </div>
 
     <div id="content" class="hidden">
@@ -24,6 +33,7 @@
         <h3 data-i18n="passwordTitle"></h3>
         <label class="field"><span data-i18n="currentPassword"></span><input id="cur-password" type="password" autocomplete="current-password" minlength="6"></label>
         <label class="field"><span data-i18n="newPassword"></span><input id="new-password" type="password" autocomplete="new-password" minlength="6"></label>
+        <label class="field"><span data-i18n="confirmPassword"></span><input id="new-password2" type="password" autocomplete="new-password" minlength="6"></label>
         <div id="pw-msg"></div>
         <button id="btn-password" class="primary" data-i18n="changePassword"></button>
       </section>
@@ -60,38 +70,107 @@
     MB.header('account')
     MB.renderTimeZonePicker(document.getElementById('tz-select'))
 
+    // ---- shared validation + OTP panel -----------------------------------------
+    // Password rule: at least 6 chars, letters AND digits. The OTP panel
+    // serves both signup and email-change confirmation — it shows after the
+    // request that triggered GoTrue's mail, then verifyOtp finishes the flow.
+    const passwordOk = (pw) => typeof pw === 'string' && pw.length >= 6 && /[A-Za-z]/.test(pw) && /\d/.test(pw)
+
+    const otpBox = document.getElementById('otp-box')
+    let otpKind = '' // 'signup' | 'email_change' | 'recovery'
+    let otpEmail = ''
+
+    function showOtp(kind, mail) {
+      otpKind = kind
+      otpEmail = mail
+      document.getElementById('otp-sent').textContent = MB.t('otpSentSignup').replace('{email}', mail)
+      document.getElementById('otp-msg').innerHTML = ''
+      document.getElementById('otp-code').value = ''
+      otpBox.classList.remove('hidden')
+    }
+
+    function hideOtp() {
+      otpBox.classList.add('hidden')
+      otpKind = ''
+      otpEmail = ''
+    }
+
+    document.getElementById('btn-otp-verify').addEventListener('click', async () => {
+      const msg = document.getElementById('otp-msg')
+      const token = document.getElementById('otp-code').value.trim()
+      if (!otpKind || !otpEmail) return
+      if (!/^\d{6}$/.test(token)) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('otpFillRequired'))}</div>`
+        return
+      }
+      try {
+        const { error } = await MB.supabase.auth.verifyOtp({ email: otpEmail, token, type: otpKind })
+        if (error) throw error
+        msg.innerHTML = `<div class="notice ok">${MB.t('otpVerified')}</div>`
+        if (otpKind === 'email_change') setTimeout(hideOtp, 1500)
+        else setTimeout(() => location.reload(), 1500)
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      }
+    })
+
+    document.getElementById('btn-otp-resend').addEventListener('click', async () => {
+      const msg = document.getElementById('otp-msg')
+      if (!otpKind || !otpEmail) return
+      try {
+        const { error } = await MB.supabase.auth.resend({ type: otpKind, email: otpEmail })
+        if (error) throw error
+        msg.innerHTML = `<div class="notice ok">${MB.t('otpResent')}</div>`
+      } catch (e) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
+      }
+    })
+
     // ---- auth gate (same pattern as submit.html) ------------------------------
     function readCreds() {
       const email = document.getElementById('email').value.trim()
       const password = document.getElementById('password').value
+      const password2 = document.getElementById('password2').value
       const box = document.getElementById('auth-error')
       if (!email || !password) {
         box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('authFill'))}</div>`
         return null
       }
       box.innerHTML = ''
-      return { email, password }
+      return { email, password, password2 }
     }
 
     document.getElementById('btn-signin').addEventListener('click', async () => {
       const creds = readCreds()
       if (!creds) return
-      const { error } = await MB.supabase.auth.signInWithPassword(creds)
+      const { error } = await MB.supabase.auth.signInWithPassword({ email: creds.email, password: creds.password })
       if (error) alert(error.message)
       else location.reload()
     })
 
     document.getElementById('btn-signup').addEventListener('click', async () => {
+      const box = document.getElementById('auth-error')
       const creds = readCreds()
       if (!creds) return
-      if (creds.password.length < 6) {
-        document.getElementById('auth-error').innerHTML =
-          `<div class="notice bad">${MB.esc(MB.t('authMin6'))}</div>`
+      if (creds.password !== creds.password2) {
+        box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('passwordMismatch'))}</div>`
         return
       }
-      const { error } = await MB.supabase.auth.signUp(creds)
-      if (error) alert(error.message)
-      else location.reload()
+      if (!passwordOk(creds.password)) {
+        box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('passwordWeak'))}</div>`
+        return
+      }
+      const { data, error } = await MB.supabase.auth.signUp({ email: creds.email, password: creds.password })
+      if (error) { alert(error.message); return }
+      // No session = confirmation required (MAILER_AUTOCONFIRM off): the code
+      // went to the mailbox, the OTP panel finishes the signup.
+      if (!data.session) {
+        document.getElementById('auth-box').classList.add('hidden')
+        showOtp('signup', creds.email)
+        box.innerHTML = `<div class="notice info">${MB.esc(MB.t('signupNeedsConfirm'))}</div>`
+      } else {
+        location.reload()
+      }
     })
 
     // ---- password card ---------------------------------------------------------
@@ -100,8 +179,17 @@
       const email = (await MB.session())?.user?.email
       const current = document.getElementById('cur-password').value
       const next = document.getElementById('new-password').value
-      if (!email || !current || next.length < 6) {
+      const next2 = document.getElementById('new-password2').value
+      if (!email || !current || !next) {
         msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('pwFillRequired'))}</div>`
+        return
+      }
+      if (next !== next2) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('passwordMismatch'))}</div>`
+        return
+      }
+      if (!passwordOk(next)) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('passwordWeak'))}</div>`
         return
       }
       try {
@@ -124,8 +212,9 @@
     // ---- email card -------------------------------------------------------------
     // The account is keyed by the internal auth id; the email is only the login
     // handle. Verify the current password first (same trick as the password
-    // card), then let GoTrue apply the change — this host runs with
-    // MAILER_AUTOCONFIRM, so no confirmation email is involved.
+    // card), then updateUser asks GoTrue to mail a confirmation code to the NEW
+    // address; the OTP panel (type email_change) finishes the change. Existing
+    // mailboxes and packs follow the internal id, not the address.
     let currentEmail = ''
     async function loadEmail() {
       currentEmail = (await MB.session())?.user?.email ?? ''
@@ -146,6 +235,10 @@
         msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('emailInvalid'))}</div>`
         return
       }
+      if (next === currentEmail) {
+        msg.innerHTML = `<div class="notice bad">${MB.esc(MB.t('emailInvalid'))}</div>`
+        return
+      }
       try {
         // Verify the current password by signing in with it — GoTrue answers
         // invalid-credentials on a mismatch; this also refreshes the session.
@@ -153,11 +246,8 @@
         if (error) throw new Error(MB.t('currentPassword') + ': ' + error.message)
         const { error: updateError } = await MB.supabase.auth.updateUser({ email: next })
         if (updateError) throw updateError
-        msg.innerHTML = `<div class="notice ok">${MB.t('emailChanged')}</div>`
-        setTimeout(async () => {
-          await MB.supabase.auth.signOut()
-          location.reload()
-        }, 1500)
+        msg.innerHTML = `<div class="notice ok">${MB.t('emailChangedSent')}</div>`
+        showOtp('email_change', next)
       } catch (e) {
         msg.innerHTML = `<div class="notice bad">${MB.esc(e.message)}</div>`
       }
@@ -202,12 +292,29 @@
       const s = await MB.session()
       document.getElementById('auth-box').classList.toggle('hidden', !!s)
       document.getElementById('content').classList.toggle('hidden', !s)
-      if (!s) return
-      await loadOrg().catch(() => {})
-      await loadEmail().catch(() => {})
+      if (s) {
+        await loadOrg().catch(() => {})
+        await loadEmail().catch(() => {})
+        return
+      }
+      // A signup started on another page (submit/packs) lands here to finish
+      // confirmation: prefill the email and open the OTP panel directly.
+      const confirmHash = /^#confirm=(.+)$/.exec(location.hash)
+      if (confirmHash) {
+        const mail = decodeURIComponent(confirmHash[1])
+        document.getElementById('email').value = mail
+        document.getElementById('auth-box').classList.add('hidden')
+        showOtp('signup', mail)
+        document.getElementById('auth-error').innerHTML =
+          `<div class="notice info">${MB.esc(MB.t('signupConfirmThere'))}</div>`
+      }
     }
 
     maybeShowContent()
+
+    // A signup started on another page (submit/packs) lands here to finish
+    // confirmation: prefill the email and open the OTP panel directly.
+    const confirmHash = /^#confirm=(.+)$/.exec(location.hash)
   </script>
 </body>
 </html>

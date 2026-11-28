@@ -105,14 +105,22 @@ verifier 环境变量:`DOCWRIGHT_ROOT`(必填)、`VERIFIER_PORT`、
   (gotrue v2.197.0,DATABASE_URL 走 postgres 超级用户 + search_path=auth,
   GOTRUE_API_PORT=9999 对齐 svc targetPort,labels 三件套对齐 svc selector)。
   改 auth 配置 = 直接改该 deployment;升级 operator 前先备份其 spec。
-- 账号注册即确认(AUTOCONFIRM,注册不发邮件);管理员 = profiles.is_admin=true。
-  密码修改与邮箱修改 = 浏览器侧 `PUT /auth/v1/user`(supabase-js updateUser),
-  无需改 auth 配置。
-- 出站邮件(忘记密码等恢复邮件)= QQ 邮箱 SMTP(supabase-auth deployment 的
-  GOTRUE_SMTP_* 环境变量,凭据在 supabase ns Secret `supabase-smtp`,
-  账号 sharework@qq.com;登记表见 commons/supabase values-project.yaml)。
-  注册确认仍走 AUTOCONFIRM 不发邮件;哪天关 AUTOCONFIRM 开注册验证,
-  需同步改市场页面上"注册即时生效"的提示文案。
+- 账号流程(2026-11-28 起):注册需要邮箱验证码(6 位 OTP,关闭 AUTOCONFIRM),
+  改邮箱需要新邮箱验证码;密码规则 = 至少 6 位且同时含字母和数字,注册与改
+  密码都要求双输确认。全部在 `/account.html` 与投稿/列表页的注册框完成;
+  邮件模板(含验证码)随市场镜像分发在 `web/mail/`,GoTrue 的模板 URL 指向
+  生产市场 `https://dm.shrwk.com/mail/*.html`(两个市场共用,生产市场必须先
+  部署含 `web/mail/` 的镜像,否则注册邮件回退为纯链接模板)。
+  `GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED=false`:改邮箱只验证新邮箱单侧
+  (QQ 邮箱收不到双端确认的旧地址侧邮件,双端流程不可用)。注册确认仍用
+  GoTrue 默认主题(Confirm your email address)。
+- 出站邮件(注册/改邮箱验证码、忘记密码) = QQ 邮箱 SMTP(supabase-auth
+  deployment 的 GOTRUE_SMTP_* 环境变量,凭据在 supabase ns Secret
+  `supabase-smtp`,账号 sharework@qq.com;登记表见 commons/supabase
+  values-project.yaml)。
+- **dev 与生产共用同一套 supabase-auth**——改 AUTOCONFIRM、SMTP、模板等
+  auth 配置同时影响两个市场;e2e 的注册场景受验证码流程影响,跑 e2e 前先
+  用 admin 接口建号或手工取码。
 - e2e 的目录重置是**残留范围删除**(按测试邮箱域),绝不能 truncate——线上
   目录属于真实账号;e2e 结束时 teardown 删除本次创建的账号与其数据。
 

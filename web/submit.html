@@ -14,7 +14,8 @@
 
     <div id="auth-box" class="card">
       <label class="field"><span data-i18n="email"></span><input id="email" type="email" autocomplete="email"></label>
-      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="current-password" minlength="6"></label>
+      <label class="field"><span data-i18n="password"></span><input id="password" type="password" autocomplete="new-password" minlength="6"></label>
+      <label class="field"><span data-i18n="confirmPassword"></span><input id="password2" type="password" autocomplete="new-password" minlength="6"></label>
       <div id="auth-error"></div>
       <button id="btn-signin" class="primary" data-i18n="signIn"></button>
       <button id="btn-signup" class="secondary" data-i18n="signUp"></button>
@@ -48,13 +49,14 @@
     function readCreds() {
       const email = document.getElementById('email').value.trim()
       const password = document.getElementById('password').value
+      const password2 = document.getElementById('password2').value
       const box = document.getElementById('auth-error')
       if (!email || !password) {
         box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('authFill'))} ${MB.esc(MB.t('authMin6'))}</div>`
         return null
       }
       box.innerHTML = ''
-      return { email, password }
+      return { email, password, password2 }
     }
 
     document.getElementById('btn-signin').addEventListener('click', async () => {
@@ -66,16 +68,23 @@
     })
 
     document.getElementById('btn-signup').addEventListener('click', async () => {
+      const box = document.getElementById('auth-error')
       const creds = readCreds()
       if (!creds) return
-      if (creds.password.length < 6) {
-        document.getElementById('auth-error').innerHTML =
-          `<div class="notice bad">${MB.esc(MB.t('authMin6'))}</div>`
+      if (creds.password !== creds.password2) {
+        box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('passwordMismatch'))}</div>`
         return
       }
-      const { error } = await MB.supabase.auth.signUp(creds)
-      if (error) alert(error.message)
-      else { await MB.session(); maybeShowForm() }
+      if (!MB.passwordOk(creds.password)) {
+        box.innerHTML = `<div class="notice bad">${MB.esc(MB.t('passwordWeak'))}</div>`
+        return
+      }
+      const { data, error } = await MB.supabase.auth.signUp({ email: creds.email, password: creds.password })
+      if (error) { alert(error.message); return }
+      // No session = email confirmation required — finish on the account page.
+      if (!data.session) { MB.finishSignupRedirect(creds.email); return }
+      await MB.session()
+      maybeShowForm()
     })
 
     let author = ''

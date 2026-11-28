@@ -86,13 +86,26 @@ window.MB = (() => {
       changePassword: 'Change password',
       passwordChanged: 'Password changed. Please sign in again with the new password.',
       emailTitle: 'Change email',
-      emailHint: 'Your account is keyed by an internal id — changing the email keeps every pack, org and submission. Takes effect immediately (no confirmation email on this host).',
+      emailHint: 'Your account is keyed by an internal id — changing the email keeps every pack, org and submission. We send a confirmation code to the NEW address; enter it to finish the change.',
       currentEmail: 'Current email',
       newEmail: 'New email',
       changeEmail: 'Change email',
       emailFillRequired: 'Current password + a new email are required.',
       emailInvalid: 'That does not look like a valid email address.',
-      emailChanged: 'Email changed. Please sign in again with the new email.',
+      emailChangedSent: 'Code sent to the new address — enter it below to finish.',
+      emailChangeVerified: 'Email changed. Next time sign in with the new email.',
+      confirmPassword: 'Confirm password',
+      passwordMismatch: 'The two passwords do not match.',
+      passwordWeak: 'Password needs at least 6 characters with both letters and digits.',
+      otpLabel: '6-digit code from your email',
+      otpSentSignup: 'A confirmation code was sent to {email}. Enter it to finish signing up.',
+      otpFillRequired: 'Enter the 6-digit code from your email.',
+      otpVerify: 'Verify code',
+      otpResend: 'Resend code',
+      otpResent: 'A new code is on its way.',
+      otpVerified: 'Verified — you are signed in.',
+      signupNeedsConfirm: 'Sign-up sends a confirmation code to your mailbox — enter it below to finish.',
+      signupConfirmThere: 'A confirmation code was sent to your mailbox. Finish signing up on the account page.',
       orgTitle: 'Publisher org',
       orgHint:
         'A publisher org labels every pack you publish. It is required before submitting; changing it relabels all your packs at once.',
@@ -228,7 +241,7 @@ window.MB = (() => {
       authFill: 'Fill in email and password first.',
       authMin6: 'Password needs at least 6 characters.',
       pwFillRequired: 'Current password + new password (min 6) required.',
-      signupInstantHtml: 'Sign-up confirms instantly on this host (no SMTP).',
+      signupInstantHtml: 'Sign-up sends a confirmation code to your mailbox — enter it on the account page to finish.',
       adminNoteHtml: 'Reviewing requires an admin profile (<code class="font-mono">profiles.is_admin</code>).',
     },
     zh: {
@@ -311,13 +324,26 @@ window.MB = (() => {
       changePassword: '修改密码',
       passwordChanged: '密码已修改,请用新密码重新登录。',
       emailTitle: '修改邮箱',
-      emailHint: '账号以内部 id 为键,改邮箱不影响名下的 pack、组织和投稿记录。本站改完即时生效,不发确认邮件。',
+      emailHint: '账号以内部 id 为键,改邮箱不影响名下的 pack、组织和投稿记录。系统会向新邮箱发送验证码,输入验证码完成修改。',
       currentEmail: '当前邮箱',
       newEmail: '新邮箱',
       changeEmail: '修改邮箱',
       emailFillRequired: '请填写当前密码和新邮箱。',
       emailInvalid: '邮箱格式不对。',
-      emailChanged: '邮箱已修改,请用新邮箱重新登录。',
+      emailChangedSent: '验证码已发到新邮箱——在下方输入完成修改。',
+      emailChangeVerified: '邮箱已修改,下次请用新邮箱登录。',
+      confirmPassword: '确认新密码',
+      passwordMismatch: '两次输入的密码不一致。',
+      passwordWeak: '密码至少 6 位,需同时包含字母和数字。',
+      otpLabel: '邮件中的 6 位验证码',
+      otpSentSignup: '验证码已发送到 {email},输入后完成注册。',
+      otpFillRequired: '请输入邮件中的 6 位验证码。',
+      otpVerify: '验证',
+      otpResend: '重发验证码',
+      otpResent: '新的验证码已发出。',
+      otpVerified: '验证成功,已登录。',
+      signupNeedsConfirm: '注册会向邮箱发送验证码,在下方输入完成注册。',
+      signupConfirmThere: '验证码已发到你的邮箱,请回到账号页面输入验证码完成注册。',
       orgTitle: '发布者组织',
       orgHint: '组织标识你发布的所有 pack;投稿前必须设置,修改组织会一并更新你的全部 pack。',
       orgCurrent: '当前组织',
@@ -452,7 +478,7 @@ window.MB = (() => {
       authFill: '请先填写邮箱和密码。',
       authMin6: '密码至少 6 位。',
       pwFillRequired: '请填写当前密码，新密码至少 6 位。',
-      signupInstantHtml: '本机自托管无邮件服务，注册即时生效。',
+      signupInstantHtml: '注册会向邮箱发送验证码,在账号页面输入完成注册。',
       adminNoteHtml: '审核页需要管理员账号（<code class="font-mono">profiles.is_admin</code>）。',
     },
   }
@@ -1118,5 +1144,16 @@ window.MB = (() => {
     return { current, state: cmp === null ? 'new' : cmp > 0 ? 'update' : cmp === 0 ? 'unchanged' : 'tooLow' }
   }
 
-  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, displayTitle, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, zipEntries, makeTarGz, detectBundle, versionCompare, versionStatus, get supabase() { return supabase } }
+  /** Shared signup password rule: min 6 chars, letters AND digits. */
+  function passwordOk(pw) {
+    return typeof pw === 'string' && pw.length >= 6 && /[A-Za-z]/.test(pw) && /\d/.test(pw)
+  }
+
+  /** GoTrue asked for email confirmation → finish on the account page's OTP
+   * panel (shared by submit/packs signup flows; the hash prefills the email). */
+  function finishSignupRedirect(email) {
+    location.href = '/account.html#confirm=' + encodeURIComponent(email)
+  }
+
+  return { loadConfig, session, api, t, lang, setLang, applyI18n, header, localizedDesc, displayTitle, esc, fmtDateTime, timeZoneId, setTimeZone, renderTimeZonePicker, inDsh, requestInstall, mountInstallButton, mountCardInstallButton, maskEmail, downloadZip, tarEntries, makeZip, zipEntries, makeTarGz, detectBundle, versionCompare, versionStatus, passwordOk, finishSignupRedirect, get supabase() { return supabase } }
 })()

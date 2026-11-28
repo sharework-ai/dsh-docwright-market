@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="960" height="620" viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect x="0" y="0" width="960" height="620" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#555"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#c0504d"/>
+    </marker>
+  </defs>
+
+  <text x="480" y="32" text-anchor="middle" font-size="20" font-weight="bold">投稿流水线</text>
+
+  <!-- step boxes (vertical main path) -->
+  <rect x="360" y="60" width="240" height="64" rx="8" fill="#e7effb" stroke="#4a76c9"/>
+  <text x="480" y="86" text-anchor="middle" font-size="14" font-weight="bold">1 投稿上传</text>
+  <text x="480" y="108" text-anchor="middle" font-size="12">/submit.html 上传 tgz，账号须已设组织</text>
+
+  <rect x="360" y="170" width="240" height="64" rx="8" fill="#fbf3e7" stroke="#c98a2e"/>
+  <text x="480" y="196" text-anchor="middle" font-size="14" font-weight="bold">2 机器校验</text>
+  <text x="480" y="218" text-anchor="middle" font-size="12">解包并运行 docwright pack:check</text>
+
+  <rect x="360" y="280" width="240" height="64" rx="8" fill="#fbf3e7" stroke="#c98a2e"/>
+  <text x="480" y="306" text-anchor="middle" font-size="14" font-weight="bold">3 审核队列</text>
+  <text x="480" y="328" text-anchor="middle" font-size="12">仅校验通过的投稿进入队列</text>
+
+  <rect x="360" y="390" width="240" height="64" rx="8" fill="#eef6ee" stroke="#6aa84f"/>
+  <text x="480" y="416" text-anchor="middle" font-size="14" font-weight="bold">4 人工审核</text>
+  <text x="480" y="438" text-anchor="middle" font-size="12">/admin.html 查看报告与源码</text>
+
+  <rect x="360" y="510" width="240" height="72" rx="8" fill="#6aa84f"/>
+  <text x="480" y="538" text-anchor="middle" font-size="14" font-weight="bold" fill="#fff">5 上架</text>
+  <text x="480" y="560" text-anchor="middle" font-size="12" fill="#fff">tarball 存档、目录更新、版本历史追加</text>
+  <text x="480" y="576" text-anchor="middle" font-size="12" fill="#fff">消费者可安装</text>
+
+  <!-- main path arrows -->
+  <line x1="480" y1="124" x2="480" y2="166" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="480" y1="234" x2="480" y2="276" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="490" y="260" font-size="12" fill="#38761d">全部检查通过</text>
+  <line x1="480" y1="344" x2="480" y2="386" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <line x1="480" y1="454" x2="480" y2="506" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <text x="490" y="484" font-size="12" fill="#38761d">通过</text>
+
+  <!-- machine rejection branch -->
+  <rect x="120" y="170" width="170" height="64" rx="8" fill="#f6e6e5" stroke="#c0504d"/>
+  <text x="205" y="196" text-anchor="middle" font-size="14" font-weight="bold">校验拒绝</text>
+  <text x="205" y="218" text-anchor="middle" font-size="12">返回报告，不保留数据</text>
+  <line x1="360" y1="202" x2="294" y2="202" stroke="#c0504d" stroke-width="1.8" marker-end="url(#arrow-red)"/>
+  <text x="325" y="160" text-anchor="middle" font-size="11" fill="#c0504d">任一检查失败</text>
+  <path d="M 205 234 C 205 330, 240 400, 352 416" fill="none" stroke="#c0504d" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow-red)"/>
+  <text x="216" y="330" font-size="12" fill="#c0504d">修正后重新投稿</text>
+
+  <!-- reject decision -->
+  <rect x="700" y="390" width="170" height="64" rx="8" fill="#f6e6e5" stroke="#c0504d"/>
+  <text x="785" y="416" text-anchor="middle" font-size="14" font-weight="bold">拒绝</text>
+  <text x="785" y="438" text-anchor="middle" font-size="12">记录决策与备注，投稿结束</text>
+  <line x1="604" y1="422" x2="696" y2="422" stroke="#c0504d" stroke-width="1.8" marker-end="url(#arrow-red)"/>
+  <text x="622" y="412" font-size="12" fill="#c0504d">不通过</text>
+
+  <!-- withdraw -->
+  <path d="M 560 280 C 620 240, 650 240, 696 242" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+  <rect x="700" y="216" width="170" height="52" rx="8" fill="#f1f1f1" stroke="#888"/>
+  <text x="785" y="238" text-anchor="middle" font-size="13" font-weight="bold">撤回</text>
+  <text x="785" y="257" text-anchor="middle" font-size="12">属主撤回待审投稿</text>
+
+  <!-- consumer -->
+  <line x1="604" y1="546" x2="700" y2="546" stroke="#555" stroke-width="1.8" marker-end="url(#arrow)"/>
+  <rect x="704" y="510" width="180" height="72" rx="8" fill="#eef6ee" stroke="#6aa84f"/>
+  <text x="794" y="538" text-anchor="middle" font-size="14" font-weight="bold">安装</text>
+  <text x="794" y="560" text-anchor="middle" font-size="12">install.mjs 装最新版，</text>
+  <text x="794" y="576" text-anchor="middle" font-size="12">或 name@version 钉版</text>
+</svg>

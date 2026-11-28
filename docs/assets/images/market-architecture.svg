@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="960" height="520" viewBox="0 0 960 520" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect x="0" y="0" width="960" height="520" fill="#ffffff"/>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <text x="480" y="32" text-anchor="middle" font-size="20" font-weight="bold">dsh-docwright-market 系统组成</text>
+
+  <!-- k3s cluster box -->
+  <rect x="40" y="60" width="620" height="430" rx="10" fill="#f4f7fb" stroke="#9db4cf"/>
+  <text x="60" y="86" font-size="14" fill="#345">k3s 集群（market 命名空间）</text>
+
+  <!-- browser side -->
+  <rect x="660" y="80" width="260" height="120" rx="8" fill="#eef6ee" stroke="#6aa84f"/>
+  <text x="790" y="112" text-anchor="middle" font-size="15" font-weight="bold">浏览器</text>
+  <text x="790" y="138" text-anchor="middle" font-size="12">目录 / 投稿 / 账号 / 审核页</text>
+  <text x="790" y="158" text-anchor="middle" font-size="12">登录与改密直连 Supabase</text>
+  <text x="870" y="182" text-anchor="middle" font-size="12">dm.shrwk.com</text>
+
+  <!-- installer -->
+  <rect x="660" y="260" width="260" height="100" rx="8" fill="#eef6ee" stroke="#6aa84f"/>
+  <text x="790" y="292" text-anchor="middle" font-size="15" font-weight="bold">安装脚本 install.mjs</text>
+  <text x="790" y="318" text-anchor="middle" font-size="12">下载 tarball 并校验哈希</text>
+  <text x="790" y="338" text-anchor="middle" font-size="12">安装到本地 packsDir</text>
+
+  <!-- server -->
+  <rect x="80" y="120" width="240" height="170" rx="8" fill="#e7effb" stroke="#4a76c9"/>
+  <text x="200" y="152" text-anchor="middle" font-size="15" font-weight="bold">市场服务端</text>
+  <text x="200" y="178" text-anchor="middle" font-size="12">账号 / 组织管理</text>
+  <text x="200" y="198" text-anchor="middle" font-size="12">投稿受理与审核流</text>
+  <text x="200" y="218" text-anchor="middle" font-size="12">目录与版本历史</text>
+  <text x="200" y="238" text-anchor="middle" font-size="12">tarball 下载代理</text>
+  <text x="200" y="258" text-anchor="middle" font-size="12">页面托管</text>
+  <text x="200" y="280" text-anchor="middle" font-size="12" fill="#4a76c9">svc/market:8398</text>
+
+  <!-- verifier -->
+  <rect x="400" y="120" width="230" height="140" rx="8" fill="#fbf3e7" stroke="#c98a2e"/>
+  <text x="515" y="152" text-anchor="middle" font-size="15" font-weight="bold">校验器</text>
+  <text x="515" y="178" text-anchor="middle" font-size="12">解包投稿归档</text>
+  <text x="515" y="198" text-anchor="middle" font-size="12">执行 docwright pack:check</text>
+  <text x="515" y="218" text-anchor="middle" font-size="12">返回机器校验报告</text>
+  <text x="515" y="242" text-anchor="middle" font-size="12" fill="#c98a2e">hostPath 挂宿主目录</text>
+
+  <!-- supabase -->
+  <rect x="80" y="360" width="550" height="110" rx="8" fill="#f3eefb" stroke="#7a4fc9"/>
+  <text x="120" y="392" font-size="15" font-weight="bold" fill="#5a35a0">Supabase</text>
+  <text x="120" y="418" font-size="12">Auth：邮箱注册、JWT 签发</text>
+  <text x="120" y="440" font-size="12">Postgres：目录 / 版本 / 投稿 / 账号数据</text>
+  <rect x="400" y="398" width="100" height="56" rx="6" fill="#fff" stroke="#7a4fc9"/>
+  <text x="450" y="422" text-anchor="middle" font-size="12">存储桶</text>
+  <text x="450" y="440" text-anchor="middle" font-size="12">归档 + tarball</text>
+
+  <!-- arrows -->
+  <line x1="660" y1="140" x2="326" y2="180" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="500" y="150" font-size="12" fill="#555">HTTPS</text>
+
+  <line x1="320" y1="220" x2="394" y2="200" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="335" y="196" font-size="12" fill="#555">投稿转交</text>
+
+  <line x1="200" y1="292" x2="200" y2="356" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="208" y="330" font-size="12" fill="#555">数据库 / 存储</text>
+
+  <line x1="660" y1="310" x2="326" y2="290" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="480" y="300" font-size="12" fill="#555">拉取索引与 tarball</text>
+
+  <line x1="790" y1="180" x2="790" y2="256" stroke="#999" stroke-width="1.2" stroke-dasharray="5,4"/>
+  <text x="800" y="226" font-size="12" fill="#777">安装同一站点</text>
+
+  <line x1="790" y1="360" x2="632" y2="430" stroke="#7a4fc9" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="700" y="400" font-size="12" fill="#5a35a0">登录 sb.shrwk.com</text>
+</svg>
